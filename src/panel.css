@@ -26,6 +26,7 @@
   background: #4f5d75;
   color: #f5f3ef;
   border-radius: 10px 10px 0 0;
+  z-index: 1;
 }
 
 #psm-panel .psm-title {
@@ -114,6 +115,14 @@
   margin-bottom: 12px;
 }
 
+#psm-panel .psm-verdict-p1 {
+  border-left-color: #3b6ea5;
+}
+
+#psm-panel .psm-verdict-p2 {
+  border-left-color: #b8443e;
+}
+
 #psm-panel .psm-section {
   background: #ffffff;
   border: 1px solid #e6e2da;
@@ -131,45 +140,167 @@
   margin-bottom: 6px;
 }
 
-#psm-panel .psm-list {
-  margin: 0;
-  padding-left: 16px;
+#psm-panel .psm-chip {
+  display: inline-block;
+  background: #eee9df;
+  border-radius: 9px;
+  padding: 0 7px;
+  font-size: 9px;
+  color: #6e675f;
+  white-space: nowrap;
 }
 
-#psm-panel .psm-list li {
-  margin-bottom: 3px;
+/* Turning point cards */
+#psm-panel .psm-swing {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid #f0ece4;
 }
 
-#psm-panel .psm-stats {
+#psm-panel .psm-swing:last-child {
+  border-bottom: none;
+}
+
+#psm-panel .psm-swing-delta {
+  flex: 0 0 36px;
+  text-align: right;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+#psm-panel .psm-swing-detail {
+  flex: 1;
+}
+
+/* Key moments timeline */
+#psm-panel .psm-moment {
+  border-left: 3px solid #d8d4cc;
+  padding: 2px 0 2px 8px;
+  margin: 3px 0;
+}
+
+#psm-panel .psm-moment-p1 {
+  border-left-color: #3b6ea5;
+}
+
+#psm-panel .psm-moment-p2 {
+  border-left-color: #b8443e;
+}
+
+/* Head-to-head share bars */
+#psm-panel .psm-metric {
+  margin-bottom: 8px;
+}
+
+#psm-panel .psm-metric-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+
+#psm-panel .psm-metric-head .psm-p1,
+#psm-panel .psm-metric-head .psm-p2 {
+  font-weight: bold;
+  min-width: 40px;
+}
+
+#psm-panel .psm-metric-head .psm-p2 {
+  text-align: right;
+}
+
+#psm-panel .psm-metric-label {
+  font-size: 10px;
+  color: #8a8378;
+  text-align: center;
+}
+
+#psm-panel .psm-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  background: #eee9df;
+  overflow: hidden;
+}
+
+#psm-panel .psm-bar-fill {
+  height: 100%;
+}
+
+#psm-panel .psm-bar-fill-p1 {
+  background: #3b6ea5;
+}
+
+#psm-panel .psm-bar-fill-p2 {
+  background: #b8443e;
+}
+
+/* Per-Pokemon tables */
+#psm-panel .psm-mons {
   width: 100%;
   border-collapse: collapse;
 }
 
-#psm-panel .psm-stats td {
+#psm-panel .psm-mons td {
   padding: 3px 4px;
   border-bottom: 1px solid #f0ece4;
+  vertical-align: middle;
 }
 
-#psm-panel .psm-stats tr:last-child td {
+#psm-panel .psm-mons tr:last-child td {
   border-bottom: none;
 }
 
-#psm-panel .psm-stats tr:hover td {
+#psm-panel .psm-mons tr:hover td {
   background: #faf7f0;
 }
 
-#psm-panel .psm-stats td:nth-child(2),
-#psm-panel .psm-stats td:nth-child(3),
-#psm-panel .psm-mons td:nth-child(4) {
-  text-align: center;
-}
-
-#psm-panel .psm-stats-head td {
-  font-weight: bold;
+#psm-panel .psm-mons-head td {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a8378;
   border-bottom: 1px solid #d8d4cc;
 }
 
-#psm-panel .psm-fainted td:first-child {
+#psm-panel .psm-mon-name {
+  width: 35%;
+}
+
+#psm-panel .psm-ministat {
+  width: 26%;
+  font-size: 11px;
+}
+
+#psm-panel .psm-minibar {
+  height: 3px;
+  border-radius: 2px;
+  background: #eee9df;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+#psm-panel .psm-minibar-fill {
+  height: 100%;
+}
+
+#psm-panel .psm-minibar-fill-taken {
+  background: #a39c90;
+}
+
+#psm-panel .psm-mon-kos {
+  text-align: center;
+  color: #8a8378;
+}
+
+#psm-panel .psm-mon-kos-some {
+  color: #3a352f;
+  font-weight: bold;
+}
+
+#psm-panel .psm-fainted .psm-mon-name {
   color: #9a938a;
   text-decoration: line-through;
 }

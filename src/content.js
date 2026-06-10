@@ -35,9 +35,9 @@
     return node;
   }
 
-  function section(parent, title) {
+  function section(parent, title, titleClass) {
     const box = el("div", "psm-section");
-    box.appendChild(el("div", "psm-section-title", title));
+    box.appendChild(el("div", "psm-section-title" + (titleClass ? " " + titleClass : ""), title));
     parent.appendChild(box);
     return box;
   }
@@ -64,13 +64,39 @@
     return w + " won a close one.";
   }
 
-  function describeSwing(parsed, s) {
-    let text =
-      "Turn " + s.turn + ": " + (s.delta > 0 ? "+" : "") + Math.round(s.delta) +
-      " momentum toward " + parsed.players[s.beneficiary];
-    const reasons = s.events.map((ev) => ev.text);
-    if (reasons.length) text += " (" + reasons.join("; ") + ")";
-    return text;
+  // A label row with the two players' values, over a single bar split in
+  // their colors by share. Reads at a glance instead of as a table row.
+  function metricRow(label, n1, n2, d1, d2) {
+    const row = el("div", "psm-metric");
+    const head = el("div", "psm-metric-head");
+    head.appendChild(el("span", "psm-p1", d1 !== undefined ? d1 : String(n1)));
+    head.appendChild(el("span", "psm-metric-label", label));
+    head.appendChild(el("span", "psm-p2", d2 !== undefined ? d2 : String(n2)));
+    row.appendChild(head);
+    const bar = el("div", "psm-bar");
+    const fill1 = el("div", "psm-bar-fill psm-bar-fill-p1");
+    const fill2 = el("div", "psm-bar-fill psm-bar-fill-p2");
+    const total = n1 + n2;
+    if (total > 0) {
+      fill1.style.width = (100 * n1) / total + "%";
+      fill2.style.width = (100 * n2) / total + "%";
+    }
+    bar.appendChild(fill1);
+    bar.appendChild(fill2);
+    row.appendChild(bar);
+    return row;
+  }
+
+  // A small number plus a thin bar scaled against the column's max value.
+  function miniStat(value, max, fillClass) {
+    const cell = el("td", "psm-ministat");
+    cell.appendChild(el("span", "", Math.round(value) + "%"));
+    const bar = el("div", "psm-minibar");
+    const fill = el("div", "psm-minibar-fill " + fillClass);
+    fill.style.width = max > 0 ? Math.min(100, (100 * value) / max) + "%" : "0";
+    bar.appendChild(fill);
+    cell.appendChild(bar);
+    return cell;
   }
 
   function buildPanel(parsed, insights) {
@@ -107,61 +133,101 @@
       el("div", "psm-hint", "Hover the chart to see what drove each turn.")
     );
 
-    body.appendChild(el("div", "psm-verdict", verdictText(parsed, insights)));
+    let verdictClass = "psm-verdict";
+    if (parsed.winner === "p1" || parsed.winner === "p2") {
+      verdictClass += " psm-verdict-" + parsed.winner;
+    }
+    body.appendChild(el("div", verdictClass, verdictText(parsed, insights)));
 
-    // Turning points: the biggest swings of the game.
+    // Turning points: one card per big swing, led by the swing size in the
+    // beneficiary's color.
     if (insights.topSwings.length) {
       const box = section(body, "Turning points");
-      const list = el("ul", "psm-list");
       for (const s of insights.topSwings) {
-        list.appendChild(el("li", "", describeSwing(parsed, s)));
+        const card = el("div", "psm-swing");
+        card.appendChild(
+          el(
+            "span",
+            "psm-swing-delta " + (s.delta > 0 ? "psm-p1" : "psm-p2"),
+            (s.delta > 0 ? "+" : "") + Math.round(s.delta)
+          )
+        );
+        const detail = el("div", "psm-swing-detail");
+        detail.appendChild(el("span", "psm-chip", "Turn " + s.turn));
+        const reasons = s.events.map((ev) => ev.text).join("; ");
+        detail.appendChild(
+          el(
+            "span",
+            "psm-swing-text",
+            " " + (reasons || "momentum shifted toward " + parsed.players[s.beneficiary])
+          )
+        );
+        card.appendChild(detail);
+        box.appendChild(card);
       }
-      box.appendChild(list);
     }
 
-    // Timeline of notable events.
+    // Timeline of notable events, color-coded by the player involved.
     const moments = [];
     for (const p of parsed.points) {
       for (const ev of p.events) {
-        if (ev.type === "faint" || ev.type === "tera" || ev.type === "hazard") {
-          moments.push({ turn: p.turn, text: "Turn " + p.turn + ": " + ev.text });
+        if (["faint", "tera", "hazard", "weather", "field"].includes(ev.type)) {
+          moments.push({ turn: p.turn, side: ev.side, text: ev.text });
         }
       }
     }
     if (moments.length) {
       const box = section(body, "Key moments");
-      const list = el("ul", "psm-list");
-      for (const m of moments) list.appendChild(el("li", "", m.text));
-      box.appendChild(list);
+      for (const m of moments) {
+        const item = el(
+          "div",
+          "psm-moment " + (m.side ? "psm-moment-" + m.side : "psm-moment-neutral")
+        );
+        item.appendChild(el("span", "psm-chip", "Turn " + m.turn));
+        item.appendChild(el("span", "", " " + m.text));
+        box.appendChild(item);
+      }
     }
 
-    // Head-to-head stats.
+    // Head-to-head, drawn as share bars instead of a numbers table.
     const statsBox = section(body, "Match stats");
-    const table = el("table", "psm-stats");
-    const addRow = (label, v1, v2, cls) => {
-      const tr = el("tr", cls);
-      tr.appendChild(el("td", "", label));
-      tr.appendChild(el("td", "psm-p1", String(v1)));
-      tr.appendChild(el("td", "psm-p2", String(v2)));
-      table.appendChild(tr);
-    };
     const s1 = parsed.stats.p1;
     const s2 = parsed.stats.p2;
-    addRow("", parsed.players.p1, parsed.players.p2, "psm-stats-head");
-    addRow("KOs", s1.kos, s2.kos);
-    addRow("Damage (attacks)", Math.round(s1.damageDealt) + "%", Math.round(s2.damageDealt) + "%");
-    addRow(
-      "Damage (hazards, status...)",
-      Math.round(s1.indirectDamage) + "%",
-      Math.round(s2.indirectDamage) + "%"
+    statsBox.appendChild(metricRow("KOs", s1.kos, s2.kos));
+    statsBox.appendChild(
+      metricRow(
+        "Damage (attacks)",
+        s1.damageDealt,
+        s2.damageDealt,
+        Math.round(s1.damageDealt) + "%",
+        Math.round(s2.damageDealt) + "%"
+      )
     );
-    addRow("Crits landed", s1.critsLanded, s2.critsLanded);
-    addRow("Status inflicted", s1.statusInflicted, s2.statusInflicted);
-    addRow("Hazard layers set", s1.hazardsSet, s2.hazardsSet);
-    addRow("Switches made", s1.switches, s2.switches);
-    if (s1.teras || s2.teras) addRow("Terastallized", s1.teras, s2.teras);
-    addRow("Turns in control", insights.control.p1 + "%", insights.control.p2 + "%");
-    statsBox.appendChild(table);
+    statsBox.appendChild(
+      metricRow(
+        "Damage (hazards, status...)",
+        s1.indirectDamage,
+        s2.indirectDamage,
+        Math.round(s1.indirectDamage) + "%",
+        Math.round(s2.indirectDamage) + "%"
+      )
+    );
+    statsBox.appendChild(metricRow("Crits landed", s1.critsLanded, s2.critsLanded));
+    statsBox.appendChild(metricRow("Status inflicted", s1.statusInflicted, s2.statusInflicted));
+    statsBox.appendChild(metricRow("Hazard layers set", s1.hazardsSet, s2.hazardsSet));
+    statsBox.appendChild(metricRow("Switches made", s1.switches, s2.switches));
+    if (s1.teras || s2.teras) {
+      statsBox.appendChild(metricRow("Terastallized", s1.teras, s2.teras));
+    }
+    statsBox.appendChild(
+      metricRow(
+        "Turns in control",
+        insights.control.p1,
+        insights.control.p2,
+        insights.control.p1 + "%",
+        insights.control.p2 + "%"
+      )
+    );
 
     const hits = [s1.biggestHit, s2.biggestHit].filter(Boolean);
     if (hits.length) {
@@ -185,23 +251,32 @@
       )
     );
 
-    // Per-Pokemon breakdown for each side.
+    // Per-Pokemon breakdown with damage bars scaled per column.
+    const allMons = parsed.pokemon.p1.concat(parsed.pokemon.p2);
+    const maxDealt = Math.max(1, ...allMons.map((m) => m.dealt));
+    const maxTaken = Math.max(1, ...allMons.map((m) => m.taken));
     for (const side of ["p1", "p2"]) {
       const team = parsed.pokemon[side];
       if (!team.length) continue;
-      const box = section(body, parsed.players[side] + "'s team");
-      const t = el("table", "psm-stats psm-mons");
-      const head = el("tr", "psm-stats-head");
+      const box = section(
+        body,
+        parsed.players[side] + "'s team",
+        side === "p1" ? "psm-p1" : "psm-p2"
+      );
+      const t = el("table", "psm-mons");
+      const head = el("tr", "psm-mons-head");
       for (const h of ["", "Dealt", "Taken", "KOs"]) head.appendChild(el("td", "", h));
       t.appendChild(head);
       for (const mon of team) {
         const tr = el("tr", mon.fainted ? "psm-fainted" : "");
-        const nameCell = el("td", "", mon.name);
+        const nameCell = el("td", "psm-mon-name", mon.name);
         if (mon.fainted) nameCell.title = "Fainted on turn " + mon.faintTurn;
         tr.appendChild(nameCell);
-        tr.appendChild(el("td", "", Math.round(mon.dealt) + "%"));
-        tr.appendChild(el("td", "", Math.round(mon.taken) + "%"));
-        tr.appendChild(el("td", "", String(mon.kos)));
+        tr.appendChild(miniStat(mon.dealt, maxDealt, "psm-bar-fill-" + side));
+        tr.appendChild(miniStat(mon.taken, maxTaken, "psm-minibar-fill-taken"));
+        const koCell = el("td", "psm-mon-kos", String(mon.kos));
+        if (mon.kos > 0) koCell.classList.add("psm-mon-kos-some");
+        tr.appendChild(koCell);
         t.appendChild(tr);
       }
       box.appendChild(t);
