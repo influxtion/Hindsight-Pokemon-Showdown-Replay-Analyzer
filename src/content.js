@@ -33,6 +33,44 @@
     return node;
   }
 
+  function section(parent, title) {
+    const box = el("div", "psm-section");
+    box.appendChild(el("div", "psm-section-title", title));
+    parent.appendChild(box);
+    return box;
+  }
+
+  function verdictText(parsed, insights) {
+    if (parsed.winner === "tie") return "The battle ended in a tie.";
+    if (!parsed.winner) return "No result recorded; the replay may be incomplete.";
+    const w = parsed.players[parsed.winner];
+    if (insights.comeback) {
+      return w + " came back from more than 20 momentum down to win.";
+    }
+    if (insights.control[parsed.winner] >= 70) {
+      return (
+        w + " controlled this game, holding the momentum lead for " +
+        insights.control[parsed.winner] + "% of it."
+      );
+    }
+    if (insights.leadChanges >= 3) {
+      return (
+        "A back-and-forth game with " + insights.leadChanges +
+        " lead changes; " + w + " came out on top."
+      );
+    }
+    return w + " won a close one.";
+  }
+
+  function describeSwing(parsed, s) {
+    let text =
+      "Turn " + s.turn + ": " + (s.delta > 0 ? "+" : "") + Math.round(s.delta) +
+      " momentum toward " + parsed.players[s.beneficiary];
+    const reasons = s.events.map((ev) => ev.text);
+    if (reasons.length) text += " (" + reasons.join("; ") + ")";
+    return text;
+  }
+
   function buildPanel(parsed, insights) {
     const panel = el("div", "");
     panel.id = PANEL_ID;
@@ -52,9 +90,10 @@
 
     const matchup = el("div", "psm-matchup");
     matchup.appendChild(el("span", "psm-p1", parsed.players.p1));
-    matchup.appendChild(el("span", "", " vs "));
+    matchup.appendChild(el("span", "psm-vs", " vs "));
     matchup.appendChild(el("span", "psm-p2", parsed.players.p2));
     body.appendChild(matchup);
+    if (parsed.format) body.appendChild(el("div", "psm-format", parsed.format));
 
     const canvas = el("canvas", "psm-chart");
     body.appendChild(canvas);
@@ -62,52 +101,40 @@
     legend.appendChild(el("span", "psm-p1", "Above the line: " + parsed.players.p1 + " ahead"));
     legend.appendChild(el("span", "psm-p2", "Below: " + parsed.players.p2 + " ahead"));
     body.appendChild(legend);
+    body.appendChild(
+      el("div", "psm-hint", "Hover the chart to see what drove each turn.")
+    );
 
-    // Verdict
-    const verdict = el("div", "psm-verdict");
-    if (parsed.winner === "tie") {
-      verdict.textContent = "The battle ended in a tie.";
-    } else if (parsed.winner) {
-      const w = parsed.players[parsed.winner];
-      let text = w + " won";
-      if (insights.comeback) text += " — a comeback from 20+ momentum down!";
-      else if (insights.control[parsed.winner] >= 70)
-        text += ", controlling " + insights.control[parsed.winner] + "% of the game.";
-      else text += " after " + insights.leadChanges + " lead change(s).";
-      verdict.textContent = text;
-    } else {
-      verdict.textContent = "No result recorded (replay may be incomplete).";
+    body.appendChild(el("div", "psm-verdict", verdictText(parsed, insights)));
+
+    // Turning points: the biggest swings of the game.
+    if (insights.topSwings.length) {
+      const box = section(body, "Turning points");
+      const list = el("ul", "psm-list");
+      for (const s of insights.topSwings) {
+        list.appendChild(el("li", "", describeSwing(parsed, s)));
+      }
+      box.appendChild(list);
     }
-    body.appendChild(verdict);
 
-    // Key moments
+    // Timeline of notable events.
     const moments = [];
-    for (const f of parsed.faints) {
-      moments.push({
-        turn: f.turn,
-        text: "Turn " + f.turn + ": " + f.name + " (" + parsed.players[f.side] + ") fainted",
-      });
+    for (const p of parsed.points) {
+      for (const ev of p.events) {
+        if (ev.type === "faint" || ev.type === "tera" || ev.type === "hazard") {
+          moments.push({ turn: p.turn, text: "Turn " + p.turn + ": " + ev.text });
+        }
+      }
     }
-    if (insights.biggestSwing && Math.abs(insights.biggestSwing.delta) >= 10) {
-      const s = insights.biggestSwing;
-      moments.push({
-        turn: s.turn,
-        text:
-          "Turn " + s.turn + ": biggest swing of the game (" +
-          (s.delta > 0 ? "+" : "") + Math.round(s.delta) + " toward " +
-          parsed.players[s.beneficiary] + ")",
-      });
-    }
-    moments.sort((a, b) => a.turn - b.turn);
     if (moments.length) {
-      body.appendChild(el("div", "psm-section-title", "Key moments"));
-      const list = el("ul", "psm-moments");
+      const box = section(body, "Key moments");
+      const list = el("ul", "psm-list");
       for (const m of moments) list.appendChild(el("li", "", m.text));
-      body.appendChild(list);
+      box.appendChild(list);
     }
 
-    // Stats table
-    body.appendChild(el("div", "psm-section-title", "Match stats"));
+    // Head-to-head stats.
+    const statsBox = section(body, "Match stats");
     const table = el("table", "psm-stats");
     const addRow = (label, v1, v2, cls) => {
       const tr = el("tr", cls);
@@ -116,20 +143,75 @@
       tr.appendChild(el("td", "psm-p2", String(v2)));
       table.appendChild(tr);
     };
+    const s1 = parsed.stats.p1;
+    const s2 = parsed.stats.p2;
     addRow("", parsed.players.p1, parsed.players.p2, "psm-stats-head");
-    addRow("KOs", parsed.stats.p1.kos, parsed.stats.p2.kos);
+    addRow("KOs", s1.kos, s2.kos);
+    addRow("Damage (attacks)", Math.round(s1.damageDealt) + "%", Math.round(s2.damageDealt) + "%");
     addRow(
-      "Damage dealt",
-      Math.round(parsed.stats.p1.damageDealt) + "%",
-      Math.round(parsed.stats.p2.damageDealt) + "%"
+      "Damage (hazards, status...)",
+      Math.round(s1.indirectDamage) + "%",
+      Math.round(s2.indirectDamage) + "%"
     );
-    addRow("Crits landed", parsed.stats.p1.critsLanded, parsed.stats.p2.critsLanded);
-    addRow("Status inflicted", parsed.stats.p1.statusInflicted, parsed.stats.p2.statusInflicted);
+    addRow("Crits landed", s1.critsLanded, s2.critsLanded);
+    addRow("Status inflicted", s1.statusInflicted, s2.statusInflicted);
+    addRow("Hazard layers set", s1.hazardsSet, s2.hazardsSet);
+    addRow("Switches made", s1.switches, s2.switches);
+    if (s1.teras || s2.teras) addRow("Terastallized", s1.teras, s2.teras);
     addRow("Turns in control", insights.control.p1 + "%", insights.control.p2 + "%");
-    if (parsed.stats.p1.teras || parsed.stats.p2.teras) {
-      addRow("Terastallized", parsed.stats.p1.teras, parsed.stats.p2.teras);
+    statsBox.appendChild(table);
+
+    const hits = [s1.biggestHit, s2.biggestHit].filter(Boolean);
+    if (hits.length) {
+      const best = hits.reduce((a, b) => (b.dmg > a.dmg ? b : a));
+      statsBox.appendChild(
+        el(
+          "div",
+          "psm-note",
+          "Biggest hit: " + best.attacker + "'s " + best.move + " took " +
+            Math.round(best.dmg) + "% off " + best.target + " on turn " + best.turn + "."
+        )
+      );
     }
-    body.appendChild(table);
+    statsBox.appendChild(
+      el(
+        "div",
+        "psm-note",
+        "Volatility: " + insights.volatility +
+          " momentum per turn on average" +
+          (insights.volatility >= 8 ? " - a chaotic one." : ".")
+      )
+    );
+
+    // Per-Pokemon breakdown for each side.
+    for (const side of ["p1", "p2"]) {
+      const team = parsed.pokemon[side];
+      if (!team.length) continue;
+      const box = section(body, parsed.players[side] + "'s team");
+      const t = el("table", "psm-stats psm-mons");
+      const head = el("tr", "psm-stats-head");
+      for (const h of ["", "Dealt", "Taken", "KOs"]) head.appendChild(el("td", "", h));
+      t.appendChild(head);
+      for (const mon of team) {
+        const tr = el("tr", mon.fainted ? "psm-fainted" : "");
+        const nameCell = el("td", "", mon.name);
+        if (mon.fainted) nameCell.title = "Fainted on turn " + mon.faintTurn;
+        tr.appendChild(nameCell);
+        tr.appendChild(el("td", "", Math.round(mon.dealt) + "%"));
+        tr.appendChild(el("td", "", Math.round(mon.taken) + "%"));
+        tr.appendChild(el("td", "", String(mon.kos)));
+        t.appendChild(tr);
+      }
+      box.appendChild(t);
+    }
+
+    body.appendChild(
+      el(
+        "div",
+        "psm-footnote",
+        "Damage numbers are in % of a Pokemon's max HP, so a full team is 600%."
+      )
+    );
 
     return { panel, canvas };
   }

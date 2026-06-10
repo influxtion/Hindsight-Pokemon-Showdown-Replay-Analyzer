@@ -18,14 +18,24 @@ refresh the replay page.
 
 ## How momentum is measured
 
-Each turn gets a score: player 1's total remaining team health percentage
-minus player 2's. Unrevealed Pokemon count as healthy. The score ranges from
--100 to +100, where positive means player 1 is ahead and zero is dead even.
+Each side gets a per-turn score and momentum is the difference, clamped to
+-100..+100 (positive means player 1 is ahead). The score starts from total
+remaining team health (unrevealed Pokemon count as healthy) and is adjusted
+for the things players actually weigh:
 
-This is a deliberately simple first pass. It ignores things a player would
-weigh — hazards on the field, status, stat boosts, win conditions still in the
-back — so the obvious next step is enriching the formula in
-`src/analysis.js` / `src/parser.js`.
+- Entry hazards on your side of the field (Stealth Rock, Spikes, Toxic
+  Spikes, Sticky Web) count against you, scaled down as you run out of
+  Pokemon to switch in.
+- Status conditions on living team members count against you, weighted by
+  severity (Toxic and freeze worst, regular poison least).
+- Stat boosts on your active Pokemon count for you — setup is pressure.
+- Screens and Tailwind count for you while they last.
+- Each fainted Pokemon costs a little extra beyond its lost HP, because it
+  also costs you options.
+
+Weights live in `PSMomentum.WEIGHTS` at the top of `src/parser.js` if you
+want to tune them. Hovering the chart shows which factors are driving the
+score on any given turn.
 
 ## How it works
 
@@ -57,11 +67,23 @@ node test/run.js battle.log
 Prints the parsed players, momentum points, faints, stats, and insights so
 you can iterate on the parser or momentum formula quickly.
 
+## What the panel shows
+
+- The momentum chart, with faint markers and hover tooltips explaining each
+  turn (contributing factors plus notable events).
+- A one-line verdict on how the game went.
+- Turning points: the biggest momentum swings and what caused them.
+- Key moments: every KO, Terastallization, and hazard set, in order.
+- Head-to-head stats: KOs, direct and indirect damage, crits, status,
+  hazard layers, switches, turns in control, biggest single hit, and how
+  volatile the game was.
+- Per-Pokemon breakdowns for both teams: damage dealt, damage taken, KOs,
+  and when each one went down.
+
 ## Ideas / roadmap
 
 - Sync the chart cursor with the replay's current turn as it plays.
-- Smarter momentum model: entry hazards, status, boosts, remaining win
-  conditions.
-- Per-Pokemon breakdowns (damage dealt/taken, turns on field).
+- Speed/matchup awareness in the momentum model (who actually threatens
+  whom, remaining win conditions).
 - Support for live battles on play.pokemonshowdown.com.
 - Doubles support (the parser currently assumes singles for some stats).

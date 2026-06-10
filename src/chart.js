@@ -3,8 +3,8 @@
 window.PSMomentum = window.PSMomentum || {};
 
 PSMomentum.renderChart = function (canvas, parsed) {
-  const P1_COLOR = "#4d8fd1";
-  const P2_COLOR = "#d15050";
+  const P1_COLOR = "#3b6ea5";
+  const P2_COLOR = "#b8443e";
   const PAD = { left: 34, right: 12, top: 12, bottom: 24 };
   const points = parsed.points;
   let hoverIndex = -1;
@@ -126,8 +126,17 @@ PSMomentum.renderChart = function (canvas, parsed) {
 
       const lines = [
         p.label + "  (momentum " + (p.m > 0 ? "+" : "") + Math.round(p.m) + ")",
-        ...p.events.map((ev) => "• " + ev.text),
       ];
+      // What is driving the score right now, biggest factors first.
+      if (p.breakdown) {
+        const factors = Object.entries(p.breakdown)
+          .filter(([, v]) => Math.abs(v) >= 1.5)
+          .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+          .slice(0, 3)
+          .map(([k, v]) => k + " " + (v > 0 ? "+" : "") + Math.round(v));
+        if (factors.length) lines.push(factors.join(", "));
+      }
+      for (const ev of p.events) lines.push("- " + ev.text);
       ctx.font = "11px sans-serif";
       let boxW = 0;
       for (const l of lines) boxW = Math.max(boxW, ctx.measureText(l).width);

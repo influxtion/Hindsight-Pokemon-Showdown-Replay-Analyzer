@@ -11,7 +11,9 @@ PSMomentum.analyze = function (parsed) {
   let p2Ahead = 0;
   let leadChanges = 0;
   let prevSign = 0;
+  let momentumSum = 0;
   for (const p of pts) {
+    momentumSum += p.m;
     const sign = p.m > EVEN_BAND ? 1 : p.m < -EVEN_BAND ? -1 : 0;
     if (sign === 1) p1Ahead++;
     else if (sign === -1) p2Ahead++;
@@ -21,20 +23,29 @@ PSMomentum.analyze = function (parsed) {
     }
   }
 
-  // Biggest single-turn swing. Each point carries the events of its own
-  // turn, so the swing into pts[i] was caused by pts[i]'s events.
-  let biggestSwing = null;
+  // Per-turn swings. Each point carries the events of its own turn, so the
+  // swing into pts[i] was caused by pts[i]'s events.
+  const swings = [];
+  let deltaSum = 0;
   for (let i = 1; i < pts.length; i++) {
     const delta = pts[i].m - pts[i - 1].m;
-    if (!biggestSwing || Math.abs(delta) > Math.abs(biggestSwing.delta)) {
-      biggestSwing = {
-        turn: pts[i].turn,
-        delta,
-        beneficiary: delta > 0 ? "p1" : "p2",
-        events: pts[i].events,
-      };
-    }
+    deltaSum += Math.abs(delta);
+    swings.push({
+      turn: pts[i].turn,
+      delta,
+      beneficiary: delta > 0 ? "p1" : "p2",
+      events: pts[i].events,
+    });
   }
+  const topSwings = swings
+    .slice()
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 3)
+    .filter((s) => Math.abs(s.delta) >= 8)
+    .sort((a, b) => a.turn - b.turn);
+  const biggestSwing = swings.length
+    ? swings.reduce((a, b) => (Math.abs(b.delta) > Math.abs(a.delta) ? b : a))
+    : null;
 
   // A comeback: the winner was behind by 20+ momentum at some point.
   let comeback = false;
@@ -47,11 +58,16 @@ PSMomentum.analyze = function (parsed) {
   return {
     leadChanges,
     biggestSwing,
+    topSwings,
     comeback,
     control: {
       p1: Math.round((100 * p1Ahead) / total),
       p2: Math.round((100 * p2Ahead) / total),
     },
+    // Average size of a turn-to-turn momentum change: how chaotic the
+    // game was.
+    volatility: swings.length ? Math.round((10 * deltaSum) / swings.length) / 10 : 0,
+    avgMomentum: Math.round(momentumSum / total),
     finalMargin: pts.length ? Math.round(pts[pts.length - 1].m) : 0,
   };
 };

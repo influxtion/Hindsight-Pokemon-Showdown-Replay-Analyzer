@@ -2,43 +2,52 @@
   position: fixed;
   top: 12px;
   right: 12px;
-  width: 360px;
+  width: 380px;
   max-height: calc(100vh - 24px);
   overflow-y: auto;
   z-index: 99999;
-  background: #fff;
-  border: 1px solid #c5c5c5;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  font-family: Verdana, sans-serif;
+  background: #faf9f7;
+  border: 1px solid #d8d4cc;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(60, 50, 40, 0.18);
+  font-family: Verdana, Geneva, sans-serif;
   font-size: 12px;
-  color: #333;
+  line-height: 1.45;
+  color: #3a352f;
 }
 
 #psm-panel .psm-header {
+  position: sticky;
+  top: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 10px;
-  background: #44546a;
-  color: #fff;
-  border-radius: 8px 8px 0 0;
-  cursor: default;
+  padding: 9px 12px;
+  background: #4f5d75;
+  color: #f5f3ef;
+  border-radius: 10px 10px 0 0;
 }
 
 #psm-panel .psm-title {
   font-weight: bold;
+  font-size: 13px;
+  letter-spacing: 0.04em;
 }
 
 #psm-panel .psm-toggle {
   background: none;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(245, 243, 239, 0.45);
   border-radius: 4px;
-  color: #fff;
+  color: #f5f3ef;
   width: 22px;
   height: 22px;
   line-height: 1;
   cursor: pointer;
+  font-family: inherit;
+}
+
+#psm-panel .psm-toggle:hover {
+  background: rgba(245, 243, 239, 0.15);
 }
 
 #psm-panel.psm-collapsed .psm-body {
@@ -46,58 +55,89 @@
 }
 
 #psm-panel .psm-body {
-  padding: 10px;
+  padding: 12px;
 }
 
 #psm-panel .psm-matchup {
   text-align: center;
   font-weight: bold;
+  font-size: 13px;
+}
+
+#psm-panel .psm-vs {
+  color: #8a8378;
+  font-weight: normal;
+}
+
+#psm-panel .psm-format {
+  text-align: center;
+  color: #8a8378;
+  font-size: 10px;
   margin-bottom: 6px;
 }
 
 #psm-panel .psm-p1 {
-  color: #4d8fd1;
+  color: #3b6ea5;
 }
 
 #psm-panel .psm-p2 {
-  color: #d15050;
+  color: #b8443e;
 }
 
 #psm-panel .psm-chart {
   width: 100%;
-  height: 180px;
+  height: 190px;
   display: block;
+  background: #ffffff;
+  border: 1px solid #e6e2da;
+  border-radius: 6px;
 }
 
 #psm-panel .psm-legend {
   display: flex;
   justify-content: space-between;
   font-size: 10px;
-  margin: 2px 0 8px;
+  margin-top: 4px;
+}
+
+#psm-panel .psm-hint {
+  font-size: 10px;
+  color: #8a8378;
+  margin: 2px 0 10px;
 }
 
 #psm-panel .psm-verdict {
-  background: #f2f5f9;
+  background: #f3eee4;
+  border-left: 3px solid #c9b687;
+  border-radius: 0 6px 6px 0;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+#psm-panel .psm-section {
+  background: #ffffff;
+  border: 1px solid #e6e2da;
   border-radius: 6px;
-  padding: 8px;
-  margin-bottom: 8px;
-  font-style: italic;
+  padding: 8px 10px;
+  margin-bottom: 10px;
 }
 
 #psm-panel .psm-section-title {
   font-weight: bold;
-  margin: 8px 0 4px;
-  border-bottom: 1px solid #e0e0e0;
-  padding-bottom: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6e675f;
+  margin-bottom: 6px;
 }
 
-#psm-panel .psm-moments {
+#psm-panel .psm-list {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 16px;
 }
 
-#psm-panel .psm-moments li {
-  margin-bottom: 2px;
+#psm-panel .psm-list li {
+  margin-bottom: 3px;
 }
 
 #psm-panel .psm-stats {
@@ -107,15 +147,41 @@
 
 #psm-panel .psm-stats td {
   padding: 3px 4px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f0ece4;
+}
+
+#psm-panel .psm-stats tr:last-child td {
+  border-bottom: none;
+}
+
+#psm-panel .psm-stats tr:hover td {
+  background: #faf7f0;
 }
 
 #psm-panel .psm-stats td:nth-child(2),
-#psm-panel .psm-stats td:nth-child(3) {
+#psm-panel .psm-stats td:nth-child(3),
+#psm-panel .psm-mons td:nth-child(4) {
   text-align: center;
 }
 
 #psm-panel .psm-stats-head td {
   font-weight: bold;
-  border-bottom: 1px solid #ccc;
+  border-bottom: 1px solid #d8d4cc;
+}
+
+#psm-panel .psm-fainted td:first-child {
+  color: #9a938a;
+  text-decoration: line-through;
+}
+
+#psm-panel .psm-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #6e675f;
+}
+
+#psm-panel .psm-footnote {
+  font-size: 10px;
+  color: #8a8378;
+  text-align: center;
 }

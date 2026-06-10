@@ -19,18 +19,30 @@ const log = fs.readFileSync(logPath, "utf8");
 const parsed = window.PSMomentum.parseReplay(log);
 const insights = window.PSMomentum.analyze(parsed);
 
+const round = (o) =>
+  JSON.parse(JSON.stringify(o, (k, v) => (typeof v === "number" ? Math.round(v) : v)));
+
 console.log("players: ", JSON.stringify(parsed.players));
-console.log("teamSize:", JSON.stringify(parsed.teamSize));
+console.log("format:  ", parsed.format);
 console.log("points:  ", parsed.points.length);
 console.log(
-  "first 3: ",
-  JSON.stringify(parsed.points.slice(0, 3).map((p) => ({ t: p.turn, m: Math.round(p.m) })))
+  "momentum:",
+  parsed.points.map((p) => p.turn + ":" + Math.round(p.m)).join(" ")
 );
-console.log(
-  "last 3:  ",
-  JSON.stringify(parsed.points.slice(-3).map((p) => ({ t: p.turn, m: Math.round(p.m) })))
-);
+const mid = parsed.points[Math.floor(parsed.points.length / 2)];
+console.log("mid breakdown (turn " + mid.turn + "):", JSON.stringify(round(mid.breakdown)));
 console.log("faints:  ", JSON.stringify(parsed.faints));
-console.log("stats:   ", JSON.stringify(parsed.stats));
+console.log("stats:   ", JSON.stringify(round(parsed.stats), null, 1));
+for (const side of ["p1", "p2"]) {
+  console.log(side + " team:");
+  for (const mon of parsed.pokemon[side]) {
+    console.log(
+      "  " + mon.name + "  dealt " + Math.round(mon.dealt) + "%  taken " +
+        Math.round(mon.taken) + "%  kos " + mon.kos +
+        (mon.fainted ? "  fainted t" + mon.faintTurn : "") +
+        (mon.status ? "  status " + mon.status : "")
+    );
+  }
+}
 console.log("winner:  ", parsed.winner);
-console.log("insights:", JSON.stringify(insights, null, 2));
+console.log("insights:", JSON.stringify(round(insights), null, 1));
