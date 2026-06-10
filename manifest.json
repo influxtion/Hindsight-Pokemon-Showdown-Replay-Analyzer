@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Hindsight - Showdown Replay Analyzer",
+  "version": "0.1.0",
+  "description": "Visualizes the momentum swings of a Pokemon Showdown replay and surfaces key stats and turning points.",
+  "content_scripts": [
+    {
+      "matches": ["https://replay.pokemonshowdown.com/*"],
+      "js": ["src/parser.js", "src/analysis.js", "src/chart.js", "src/content.js"],
+      "css": ["src/panel.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
