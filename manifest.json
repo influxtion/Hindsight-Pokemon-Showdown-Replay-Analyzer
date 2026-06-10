@@ -6,7 +6,14 @@
   "content_scripts": [
     {
       "matches": ["https://replay.pokemonshowdown.com/*"],
-      "js": ["src/parser.js", "src/analysis.js", "src/chart.js", "src/content.js"],
+      "js": [
+        "src/data/typechart.js",
+        "src/data/dex.js",
+        "src/parser.js",
+        "src/analysis.js",
+        "src/chart.js",
+        "src/content.js"
+      ],
       "css": ["src/panel.css"],
       "run_at": "document_idle"
     }

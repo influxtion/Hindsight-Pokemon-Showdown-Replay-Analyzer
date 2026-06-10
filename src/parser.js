@@ -20,6 +20,10 @@ PSMomentum.WEIGHTS = {
   boostPerStage: 1.5,
   boostCap: 9,
   faintedExtra: 2,
+  // Active-matchup factors: points per doubling of type effectiveness
+  // advantage, and a flat edge for having the faster active Pokemon.
+  threatPerStep: 1.5,
+  speedEdge: 2.5,
 };
 
 PSMomentum.parseReplay = function (logText) {
@@ -94,6 +98,8 @@ PSMomentum.parseReplay = function (logText) {
         fainted: false,
         status: null,
         boosts: {},
+        tera: null,
+        moveTypes: {},
         dealt: 0,
         taken: 0,
         kos: 0,
@@ -157,10 +163,84 @@ PSMomentum.parseReplay = function (logText) {
     };
   }
 
+  function dexEntry(mon) {
+    return (PSMomentum.DEX && PSMomentum.DEX[normId(mon.species)]) || null;
+  }
+
+  // A Pokemon's current defensive typing (Tera overrides, except Stellar).
+  function typesOf(mon) {
+    if (mon.tera && mon.tera !== "Stellar") return [mon.tera];
+    const entry = dexEntry(mon);
+    return entry ? entry.t : [];
+  }
+
+  function effectiveness(atkType, defTypes) {
+    const row = PSMomentum.TYPECHART && PSMomentum.TYPECHART[atkType];
+    if (!row) return 1;
+    let mult = 1;
+    for (const t of defTypes) mult *= row[t] !== undefined ? row[t] : 1;
+    return mult;
+  }
+
+  // How hard `attacker` can hit `defender`: the best type effectiveness
+  // among its revealed attacking types plus its own (assumed STAB) types.
+  function threat(attacker, defender) {
+    const defTypes = typesOf(defender);
+    if (!defTypes.length) return 1;
+    const atkTypes = new Set(Object.keys(attacker.moveTypes));
+    const entry = dexEntry(attacker);
+    if (entry) for (const t of entry.t) atkTypes.add(t);
+    if (attacker.tera && attacker.tera !== "Stellar") atkTypes.add(attacker.tera);
+    if (!atkTypes.size) return 1;
+    let best = 0;
+    for (const t of atkTypes) best = Math.max(best, effectiveness(t, defTypes));
+    return best;
+  }
+
+  // Effective speed: base Speed with boosts, paralysis, and Tailwind. EVs,
+  // natures, and items (Choice Scarf...) are invisible in the log, so this
+  // is an approximation.
+  function speedOf(mon, side) {
+    const entry = dexEntry(mon);
+    let spe = entry ? entry.s : 80;
+    const stage = mon.boosts.spe || 0;
+    spe *= stage >= 0 ? (2 + stage) / 2 : 2 / (2 - stage);
+    if (mon.status === "par") spe *= 0.5;
+    if (sideCond[side].tailwind) spe *= 2;
+    return spe;
+  }
+
+  function activeMon(side) {
+    for (const pos of Object.keys(active)) {
+      if (!pos.startsWith(side)) continue;
+      const mon = mons.get(active[pos]);
+      if (mon && !mon.fainted) return mon;
+    }
+    return null;
+  }
+
   function snapshot(turn, label) {
     const s1 = sideScore("p1");
     const s2 = sideScore("p2");
-    const m = Math.max(-100, Math.min(100, s1.total - s2.total));
+
+    // Active matchup: who threatens whom right now, and who is faster.
+    let threatDiff = 0;
+    let speedDiff = 0;
+    const a1 = activeMon("p1");
+    const a2 = activeMon("p2");
+    if (a1 && a2) {
+      // log2 of the effectiveness multiplier: 4x = +2 steps, immune = -3.
+      const steps = (x) => Math.log2(Math.max(x, 0.125));
+      threatDiff = W.threatPerStep * (steps(threat(a1, a2)) - steps(threat(a2, a1)));
+      const sp1 = speedOf(a1, "p1");
+      const sp2 = speedOf(a2, "p2");
+      if (sp1 !== sp2) speedDiff = sp1 > sp2 ? W.speedEdge : -W.speedEdge;
+    }
+
+    const m = Math.max(
+      -100,
+      Math.min(100, s1.total - s2.total + threatDiff + speedDiff)
+    );
     points.push({
       turn,
       label,
@@ -176,6 +256,8 @@ PSMomentum.parseReplay = function (logText) {
         Boosts: s1.boostBonus - s2.boostBonus,
         Field: s1.fieldBonus - s2.fieldBonus,
         Faints: s2.faintPen - s1.faintPen,
+        Matchup: threatDiff,
+        Speed: speedDiff,
       },
     });
     turnEvents = [];
@@ -216,12 +298,20 @@ PSMomentum.parseReplay = function (logText) {
       }
       // Heavy hits are momentum events in their own right.
       if (delta >= 35 && attacker) {
+        // Mirror matches: both sides can field the same Pokemon.
+        const sameName = attacker.name === mon.name;
+        const atkName = sameName
+          ? attacker.name + " (" + players[lastMove.side] + ")"
+          : attacker.name;
+        const defName = sameName
+          ? mon.name + " (" + players[ident.side] + ")"
+          : mon.name;
         turnEvents.push({
           type: "hit",
           side: lastMove.side,
           text:
-            attacker.name + "'s " + lastMove.move + " took " +
-            Math.round(delta) + "% off " + mon.name,
+            atkName + "'s " + lastMove.move + " took " +
+            Math.round(delta) + "% off " + defName,
         });
       }
     }
@@ -284,7 +374,11 @@ PSMomentum.parseReplay = function (logText) {
 
       case "move": {
         const ident = parseIdent(parts[2]);
-        if (ident) lastMove = { key: ident.key, side: ident.side, move: parts[3] };
+        if (!ident) break;
+        lastMove = { key: ident.key, side: ident.side, move: parts[3] };
+        // Remember each Pokemon's revealed attacking types.
+        const data = PSMomentum.MOVES && PSMomentum.MOVES[normId(parts[3])];
+        if (data && data.c) getMon(ident).moveTypes[data.t] = true;
         break;
       }
 
@@ -439,11 +533,13 @@ PSMomentum.parseReplay = function (logText) {
       case "-terastallize": {
         const ident = parseIdent(parts[2]);
         if (!ident) break;
+        const mon = getMon(ident);
+        mon.tera = parts[3] || null;
         stats[ident.side].teras++;
         turnEvents.push({
           type: "tera",
           side: ident.side,
-          text: getMon(ident).name + " Terastallized (" + (parts[3] || "?") + ")",
+          text: mon.name + " Terastallized (" + (parts[3] || "?") + ")",
         });
         break;
       }

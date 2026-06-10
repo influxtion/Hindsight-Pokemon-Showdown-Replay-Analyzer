@@ -32,6 +32,13 @@ for the things players actually weigh:
 - Screens and Tailwind count for you while they last.
 - Each fainted Pokemon costs a little extra beyond its lost HP, because it
   also costs you options.
+- The active matchup: how hard each active Pokemon can hit the other,
+  based on its revealed attacking types (plus assumed STAB and Tera type)
+  against the opponent's typing, and which side's active is faster.
+
+Speed uses base stats adjusted for boosts, paralysis, and Tailwind. EVs,
+natures, and items are invisible in a replay log, so a Choice Scarf will
+fool it; treat the speed edge as an estimate.
 
 Weights live in `PSMomentum.WEIGHTS` at the top of `src/parser.js` if you
 want to tune them. Hovering the chart shows which factors are driving the
@@ -48,14 +55,22 @@ replay.pokemonshowdown.com.
 
 ```
 src/
-  parser.js    battle log -> per-turn health snapshots + events
-  analysis.js  snapshots -> lead changes, biggest swing, control %
+  data/
+    typechart.js  type effectiveness chart (hand-written)
+    dex.js        species types/Speed + move types (generated, ~90 KB)
+  parser.js    battle log -> per-turn momentum snapshots + events
+  analysis.js  snapshots -> turning points, lead changes, control %
   chart.js     canvas line chart with hover tooltips
   content.js   page integration: finds the log, builds the panel
   panel.css    panel styling
 test/
   run.js       parser smoke test for Node (no browser needed)
+tools/
+  build-dex.js regenerates src/data/dex.js from Showdown's public JSON
 ```
+
+When a new generation (or new species) comes out, refresh the bundled data
+with `node tools/build-dex.js`.
 
 ## Testing the parser without a browser
 
@@ -83,7 +98,7 @@ you can iterate on the parser or momentum formula quickly.
 ## Ideas / roadmap
 
 - Sync the chart cursor with the replay's current turn as it plays.
-- Speed/matchup awareness in the momentum model (who actually threatens
-  whom, remaining win conditions).
+- Win-condition awareness: weigh how well the Pokemon still in the back
+  match up against the opponent's remaining team, not just the actives.
 - Support for live battles on play.pokemonshowdown.com.
 - Doubles support (the parser currently assumes singles for some stats).
