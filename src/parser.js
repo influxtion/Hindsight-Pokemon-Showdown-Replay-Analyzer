@@ -21,9 +21,13 @@ PSMomentum.WEIGHTS = {
   boostCap: 9,
   faintedExtra: 2,
   // Active-matchup factors: points per doubling of type effectiveness
-  // advantage, and a flat edge for having the faster active Pokemon.
+  // advantage, and a flat edge when one active has been observed to move
+  // first (inferred from move order, so EVs/items are accounted for).
   threatPerStep: 1.5,
   speedEdge: 2.5,
+  // Weather and terrain are credited to whoever set them while they last.
+  weatherBonus: 2.5,
+  terrainBonus: 2.5,
 };
 
 PSMomentum.parseReplay = function (logText) {
@@ -58,6 +62,11 @@ PSMomentum.parseReplay = function (logText) {
   let turnEvents = [];
   let winner = null;
   let lastMove = null; // { key, side, move }
+  // Speed facts observed from move order: "fasterKey>slowerKey" entries.
+  const fasterThan = new Map();
+  let lastTurnMove = null; // { key, side, prio, turn }
+  let weather = null; // { id, side } - side is whoever set it
+  const fieldEffects = {}; // condition id -> { side }, terrains + Trick Room
 
   const other = (side) => (side === "p1" ? "p2" : "p1");
   const normId = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -91,6 +100,7 @@ PSMomentum.parseReplay = function (logText) {
   function getMon(ident) {
     if (!mons.has(ident.key)) {
       mons.set(ident.key, {
+        key: ident.key,
         side: ident.side,
         name: ident.name,
         species: ident.name,
@@ -138,6 +148,11 @@ PSMomentum.parseReplay = function (logText) {
     for (const [cond, layers] of Object.entries(sideCond[side])) {
       if (W.hazards[cond]) hazardPen += W.hazards[cond] * layers * remainFrac;
       if (W.field[cond]) fieldBonus += W.field[cond];
+    }
+    // Weather/terrain/Trick Room benefit whoever chose to set them.
+    if (weather && weather.side === side) fieldBonus += W.weatherBonus;
+    for (const eff of Object.values(fieldEffects)) {
+      if (eff.side === side) fieldBonus += W.terrainBonus;
     }
 
     // Net boost stages across this side's active Pokemon.
@@ -197,19 +212,6 @@ PSMomentum.parseReplay = function (logText) {
     return best;
   }
 
-  // Effective speed: base Speed with boosts, paralysis, and Tailwind. EVs,
-  // natures, and items (Choice Scarf...) are invisible in the log, so this
-  // is an approximation.
-  function speedOf(mon, side) {
-    const entry = dexEntry(mon);
-    let spe = entry ? entry.s : 80;
-    const stage = mon.boosts.spe || 0;
-    spe *= stage >= 0 ? (2 + stage) / 2 : 2 / (2 - stage);
-    if (mon.status === "par") spe *= 0.5;
-    if (sideCond[side].tailwind) spe *= 2;
-    return spe;
-  }
-
   function activeMon(side) {
     for (const pos of Object.keys(active)) {
       if (!pos.startsWith(side)) continue;
@@ -232,9 +234,11 @@ PSMomentum.parseReplay = function (logText) {
       // log2 of the effectiveness multiplier: 4x = +2 steps, immune = -3.
       const steps = (x) => Math.log2(Math.max(x, 0.125));
       threatDiff = W.threatPerStep * (steps(threat(a1, a2)) - steps(threat(a2, a1)));
-      const sp1 = speedOf(a1, "p1");
-      const sp2 = speedOf(a2, "p2");
-      if (sp1 !== sp2) speedDiff = sp1 > sp2 ? W.speedEdge : -W.speedEdge;
+      // Speed edge only when move order has actually shown who is faster.
+      if (fasterThan.has(a1.key + ">" + a2.key)) speedDiff = W.speedEdge;
+      else if (fasterThan.has(a2.key + ">" + a1.key)) speedDiff = -W.speedEdge;
+      // Under Trick Room the slower Pokemon acts first.
+      if (fieldEffects.trickroom) speedDiff = -speedDiff;
     }
 
     const m = Math.max(
@@ -379,6 +383,22 @@ PSMomentum.parseReplay = function (logText) {
         // Remember each Pokemon's revealed attacking types.
         const data = PSMomentum.MOVES && PSMomentum.MOVES[normId(parts[3])];
         if (data && data.c) getMon(ident).moveTypes[data.t] = true;
+        // Move order reveals who is actually faster: if both actives used
+        // same-priority moves this turn, the first mover outspeeds. This
+        // bakes in EVs, natures, and Choice Scarf, which the log never
+        // shows directly. Skipped under Trick Room.
+        const prio = (data && data.p) || 0;
+        if (
+          lastTurnMove &&
+          lastTurnMove.turn === currentTurn &&
+          lastTurnMove.side !== ident.side &&
+          lastTurnMove.prio === prio &&
+          !fieldEffects.trickroom
+        ) {
+          fasterThan.set(lastTurnMove.key + ">" + ident.key, true);
+          fasterThan.delete(ident.key + ">" + lastTurnMove.key);
+        }
+        lastTurnMove = { key: ident.key, side: ident.side, prio, turn: currentTurn };
         break;
       }
 
@@ -518,17 +538,42 @@ PSMomentum.parseReplay = function (logText) {
         break;
       }
 
-      case "-weather":
-        if (!line.includes("[upkeep]") && parts[2] && parts[2] !== "none") {
-          turnEvents.push({ type: "weather", text: spaceOut(parts[2]) + " started" });
+      case "-weather": {
+        if (!parts[2] || parts[2] === "none") {
+          weather = null;
+          break;
         }
-        break;
-
-      case "-fieldstart": {
-        const pretty = spaceOut((parts[2] || "").replace(/^move:\s*/, ""));
-        if (pretty) turnEvents.push({ type: "field", text: pretty + " started" });
+        if (line.includes("[upkeep]")) break;
+        // Setter: the [of] Pokemon (ability weather) or whoever just moved.
+        const of = /\[of\]\s*(p[12])/.exec(line);
+        weather = {
+          id: normId(parts[2]),
+          side: of ? of[1] : lastMove ? lastMove.side : null,
+        };
+        turnEvents.push({ type: "weather", text: spaceOut(parts[2]) + " started" });
         break;
       }
+
+      case "-fieldstart": {
+        const cond = normId((parts[2] || "").replace(/^move:\s*/, ""));
+        if (!cond) break;
+        const of = /\[of\]\s*(p[12])/.exec(line);
+        const side = of ? of[1] : lastMove ? lastMove.side : null;
+        // A new terrain replaces any existing one.
+        if (cond.endsWith("terrain")) {
+          for (const k of Object.keys(fieldEffects)) {
+            if (k.endsWith("terrain")) delete fieldEffects[k];
+          }
+        }
+        fieldEffects[cond] = { side };
+        const pretty = spaceOut((parts[2] || "").replace(/^move:\s*/, ""));
+        turnEvents.push({ type: "field", text: pretty + " started" });
+        break;
+      }
+
+      case "-fieldend":
+        delete fieldEffects[normId((parts[2] || "").replace(/^move:\s*/, ""))];
+        break;
 
       case "-terastallize": {
         const ident = parseIdent(parts[2]);

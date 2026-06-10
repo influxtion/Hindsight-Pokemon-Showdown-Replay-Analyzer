@@ -34,11 +34,15 @@ for the things players actually weigh:
   also costs you options.
 - The active matchup: how hard each active Pokemon can hit the other,
   based on its revealed attacking types (plus assumed STAB and Tera type)
-  against the opponent's typing, and which side's active is faster.
-
-Speed uses base stats adjusted for boosts, paralysis, and Tailwind. EVs,
-natures, and items are invisible in a replay log, so a Choice Scarf will
-fool it; treat the speed edge as an estimate.
+  against the opponent's typing.
+- A speed edge, inferred from observed move order rather than base stats:
+  when both actives use same-priority moves in a turn, the first mover is
+  faster, period - that observation bakes in EVs, natures, and Choice
+  Scarf, none of which a replay reveals directly. Until a pairing has
+  been observed, the speed component stays at zero. Trick Room flips it.
+- Weather, terrain, and Trick Room, credited to the side that set them
+  for as long as they last (players set these up because they benefit
+  from them, so setter-benefit is the reliable reading).
 
 Weights live in `PSMomentum.WEIGHTS` at the top of `src/parser.js` if you
 want to tune them. Hovering the chart shows which factors are driving the

@@ -33,6 +33,11 @@ console.log(
 );
 const mid = parsed.points[Math.floor(parsed.points.length / 2)];
 console.log("mid breakdown (turn " + mid.turn + "):", JSON.stringify(round(mid.breakdown)));
+if (process.argv[3] === "--breakdown") {
+  for (const p of parsed.points) {
+    console.log("  " + p.label + ": " + JSON.stringify(round(p.breakdown)));
+  }
+}
 console.log("faints:  ", JSON.stringify(parsed.faints));
 console.log("stats:   ", JSON.stringify(round(parsed.stats), null, 1));
 for (const side of ["p1", "p2"]) {
