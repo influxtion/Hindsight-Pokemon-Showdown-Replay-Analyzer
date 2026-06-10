@@ -217,19 +217,30 @@
   }
 
   async function init() {
-    document.getElementById(PANEL_ID)?.remove();
-    if (!isReplayPath(location.pathname)) return;
+    try {
+      console.log("[Hindsight] init, path =", location.pathname);
+      document.getElementById(PANEL_ID)?.remove();
+      if (!isReplayPath(location.pathname)) {
+        console.log("[Hindsight] not a replay path, skipping");
+        return;
+      }
 
-    const log = await getLog();
-    if (!log) return;
+      const log = await getLog();
+      console.log("[Hindsight] log:", log ? log.length + " chars" : "NOT FOUND");
+      if (!log) return;
 
-    const parsed = NS.parseReplay(log);
-    if (parsed.points.length < 2) return;
-    const insights = NS.analyze(parsed);
+      const parsed = NS.parseReplay(log);
+      console.log("[Hindsight] parsed", parsed.points.length, "points");
+      if (parsed.points.length < 2) return;
+      const insights = NS.analyze(parsed);
 
-    const { panel, canvas } = buildPanel(parsed, insights);
-    document.body.appendChild(panel);
-    NS.renderChart(canvas, parsed);
+      const { panel, canvas } = buildPanel(parsed, insights);
+      document.body.appendChild(panel);
+      NS.renderChart(canvas, parsed);
+      console.log("[Hindsight] panel rendered");
+    } catch (err) {
+      console.error("[Hindsight] failed:", err);
+    }
   }
 
   // The replay site can navigate client-side, so watch for URL changes.
