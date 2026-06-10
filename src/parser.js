@@ -68,6 +68,21 @@ PSMomentum.parseReplay = function (logText) {
   let turnEvents = [];
   let winner = null;
   let lastMove = null; // { key, side, move }
+  // Accuracy bookkeeping: landing an imperfect-accuracy move is mild luck
+  // for the user, mirroring how a miss is luck for the defender. Tracked
+  // per side and move, aggregated into one ledger entry at the end.
+  const accUsage = { p1: {}, p2: {} }; // side -> move -> {hits, misses, acc}
+  let pendingAcc = null; // { side, move } - an accuracy roll not yet resolved
+
+  function resolvePendingAcc(hit) {
+    if (!pendingAcc) return;
+    const entry = accUsage[pendingAcc.side][pendingAcc.move];
+    if (entry) {
+      if (hit) entry.hits++;
+      else entry.misses++;
+    }
+    pendingAcc = null;
+  }
   // Speed facts observed from move order: "fasterKey>slowerKey" entries.
   const fasterThan = new Map();
   let lastTurnMove = null; // { key, side, prio, turn }
@@ -377,6 +392,7 @@ PSMomentum.parseReplay = function (logText) {
         break;
 
       case "turn": {
+        resolvePendingAcc(true);
         const n = parseInt(parts[2], 10);
         if (currentTurn > 0) {
           snapshot(currentTurn, "Turn " + currentTurn);
@@ -412,10 +428,17 @@ PSMomentum.parseReplay = function (logText) {
       case "move": {
         const ident = parseIdent(parts[2]);
         if (!ident) break;
+        // The previous accuracy roll resolved without a miss: it hit.
+        resolvePendingAcc(true);
         lastMove = { key: ident.key, side: ident.side, move: parts[3] };
         // Remember each Pokemon's revealed attacking types.
         const data = PSMomentum.MOVES && PSMomentum.MOVES[normId(parts[3])];
         if (data && data.c) getMon(ident).moveTypes[data.t] = true;
+        if (data && data.a) {
+          const book = accUsage[ident.side];
+          if (!book[parts[3]]) book[parts[3]] = { hits: 0, misses: 0, acc: data.a };
+          pendingAcc = { side: ident.side, move: parts[3] };
+        }
         // Move order reveals who is actually faster: if both actives used
         // same-priority moves this turn, the first mover outspeeds. This
         // bakes in EVs, natures, and Choice Scarf, which the log never
@@ -680,6 +703,7 @@ PSMomentum.parseReplay = function (logText) {
         // a Fly/Dig turn or after evasion boosts is play, not chance.
         const src = parseIdent(parts[2]);
         if (!src || !lastMove) break;
+        resolvePendingAcc(false);
         const data = PSMomentum.MOVES && PSMomentum.MOVES[normId(lastMove.move)];
         if (data && data.a) {
           addLuck(
@@ -721,6 +745,37 @@ PSMomentum.parseReplay = function (logText) {
       case "tie":
         winner = "tie";
         break;
+
+      case "-fail":
+        // The move never connected; no accuracy luck either way.
+        pendingAcc = null;
+        break;
+
+      case "-activate":
+        // Blocked by Protect/Detect etc. - no accuracy roll happened.
+        if (/protect|detect|king's shield|spiky shield|baneful bunker/i.test(parts[3] || "")) {
+          pendingAcc = null;
+        }
+        break;
+    }
+  }
+  resolvePendingAcc(true);
+
+  // Aggregate accuracy luck: each landed hit of an imperfect move is worth
+  // its miss chance. (Each miss was already credited to the defender, so
+  // playing exactly to the odds nets out to zero.)
+  for (const side of ["p1", "p2"]) {
+    for (const [move, u] of Object.entries(accUsage[side])) {
+      const weight = u.hits * (1 - u.acc / 100);
+      if (weight < 0.4) continue; // a single landed Hydro Pump is not a story
+      let text =
+        "Hit " + u.hits + "/" + (u.hits + u.misses) + " " + move +
+        " (" + u.acc + "% accurate";
+      if (!u.misses && u.hits >= 3) {
+        text += ", ~" + Math.max(1, Math.round(100 * Math.pow(u.acc / 100, u.hits))) + "% odds";
+      }
+      text += ")";
+      stats[side].luckEvents.push({ turn: null, text, p: weight, flat: true });
     }
   }
 

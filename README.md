@@ -107,8 +107,13 @@ you can iterate on the parser or momentum formula quickly.
   effect like Nuzzle's paralysis weighs zero) times its impact (how much
   that turn actually swung momentum toward the beneficiary). The panel
   shows each player's luck-point total and the biggest breaks first.
-  Damage rolls (85-100%) are the one kind of luck a replay cannot
-  expose, since exact stats are hidden.
+  Accuracy works in both directions: every landed hit of an imperfect
+  move earns its user a small credit (hitting 10/10 Hydro Pumps is ~11%
+  odds and scores accordingly, aggregated into one "Hit 10/10" entry),
+  every miss credits the defender, and playing exactly to the odds nets
+  to zero. Moves blocked by Protect or that failed never rolled
+  accuracy and are excluded. Damage rolls (85-100%) are the one kind of
+  luck a replay cannot expose, since exact stats are hidden.
 - Per-Pokemon breakdowns for both teams: damage dealt, damage taken, KOs,
   and when each one went down.
 

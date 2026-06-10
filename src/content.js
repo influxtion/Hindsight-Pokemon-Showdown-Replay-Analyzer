@@ -268,7 +268,7 @@
       const MAX_SHOWN = 6;
       for (const ev of all.slice(0, MAX_SHOWN)) {
         const item = el("div", "psm-moment psm-moment-" + ev.side);
-        item.appendChild(el("span", "psm-chip", "Turn " + ev.turn));
+        item.appendChild(el("span", "psm-chip", ev.turn ? "Turn " + ev.turn : "All game"));
         item.appendChild(el("span", "", " " + ev.text));
         box.appendChild(item);
       }

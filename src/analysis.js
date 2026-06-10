@@ -57,6 +57,8 @@ PSMomentum.analyze = function (parsed) {
   for (const side of ["p1", "p2"]) {
     const sign = side === "p1" ? 1 : -1;
     const events = parsed.stats[side].luckEvents.map((ev) => {
+      // Game-long aggregates (accuracy streaks) carry their own weight.
+      if (ev.flat) return { turn: null, text: ev.text, weight: ev.p };
       const toward = (swingByTurn[ev.turn] || 0) * sign;
       const impact = Math.max(0.25, Math.min(2, toward / 10));
       return { turn: ev.turn, text: ev.text, weight: ev.p * impact };
