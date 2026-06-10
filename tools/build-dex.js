@@ -26,6 +26,9 @@ async function main() {
     if (!m.type) continue;
     moves[id] = { t: m.type, c: m.category === "Status" ? 0 : 1 };
     if (m.priority) moves[id].p = m.priority;
+    // Accuracy only when the move can naturally miss; misses of perfect-
+    // accuracy moves come from semi-invulnerability or evasion, not luck.
+    if (typeof m.accuracy === "number" && m.accuracy < 100) moves[id].a = m.accuracy;
   }
 
   const out =

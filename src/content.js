@@ -251,6 +251,43 @@
       )
     );
 
+    // Luck: chance events (crits, natural misses, full paralysis, flinches,
+    // sleep rolls, secondary procs) and who they favored.
+    const luck1 = parsed.stats.p1.luckEvents;
+    const luck2 = parsed.stats.p2.luckEvents;
+    if (luck1.length || luck2.length) {
+      const box = section(body, "Luck");
+      box.appendChild(metricRow("Breaks in their favor", luck1.length, luck2.length));
+      const all = luck1
+        .map((e) => ({ turn: e.turn, text: e.text, side: "p1" }))
+        .concat(luck2.map((e) => ({ turn: e.turn, text: e.text, side: "p2" })))
+        .sort((a, b) => a.turn - b.turn);
+      const MAX_SHOWN = 6;
+      for (const ev of all.slice(0, MAX_SHOWN)) {
+        const item = el("div", "psm-moment psm-moment-" + ev.side);
+        item.appendChild(el("span", "psm-chip", "Turn " + ev.turn));
+        item.appendChild(el("span", "", " " + ev.text));
+        box.appendChild(item);
+      }
+      if (all.length > MAX_SHOWN) {
+        box.appendChild(
+          el("div", "psm-note", "+ " + (all.length - MAX_SHOWN) + " more chance events.")
+        );
+      }
+      const luckDiff = luck1.length - luck2.length;
+      if (Math.abs(luckDiff) >= 3) {
+        const lucky = luckDiff > 0 ? "p1" : "p2";
+        box.appendChild(
+          el(
+            "div",
+            "psm-note",
+            "The dice favored " + parsed.players[lucky] + " in this one (" +
+              Math.abs(luckDiff) + " more breaks)."
+          )
+        );
+      }
+    }
+
     // Per-Pokemon breakdown with damage bars scaled per column.
     const allMons = parsed.pokemon.p1.concat(parsed.pokemon.p2);
     const maxDealt = Math.max(1, ...allMons.map((m) => m.dealt));

@@ -51,5 +51,10 @@ for (const side of ["p1", "p2"]) {
     );
   }
 }
+for (const side of ["p1", "p2"]) {
+  const luck = parsed.stats[side].luckEvents;
+  console.log(side + " luck (" + luck.length + "):");
+  for (const ev of luck) console.log("  t" + ev.turn + " " + ev.text);
+}
 console.log("winner:  ", parsed.winner);
 console.log("insights:", JSON.stringify(round(insights), null, 1));

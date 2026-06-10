@@ -32,6 +32,8 @@ for the things players actually weigh:
 - Screens and Tailwind count for you while they last.
 - Each fainted Pokemon costs a little extra beyond its lost HP, because it
   also costs you options.
+- Item loss: a Pokemon that has eaten its berry, popped its Air Balloon,
+  or had its item knocked off fights a little weaker from then on.
 - The active matchup: how hard each active Pokemon can hit the other,
   based on its revealed attacking types (plus assumed STAB and Tera type)
   against the opponent's typing.
@@ -96,6 +98,13 @@ you can iterate on the parser or momentum formula quickly.
 - Head-to-head stats: KOs, direct and indirect damage, crits, status,
   hazard layers, switches, turns in control, biggest single hit, and how
   volatile the game was.
+- A luck ledger: every chance event the log can prove - crits, natural
+  misses (the move's real accuracy is checked, so a miss against a Fly
+  turn doesn't count), full paralysis, flinches, extra sleep/freeze
+  turns, confusion self-hits, and secondary-effect procs like Scald
+  burns - tallied per player, with a note when the dice clearly favored
+  one side. Damage rolls (85-100%) are the one kind of luck a replay
+  cannot expose, since exact stats are hidden.
 - Per-Pokemon breakdowns for both teams: damage dealt, damage taken, KOs,
   and when each one went down.
 

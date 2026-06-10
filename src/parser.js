@@ -28,6 +28,9 @@ PSMomentum.WEIGHTS = {
   // Weather and terrain are credited to whoever set them while they last.
   weatherBonus: 2.5,
   terrainBonus: 2.5,
+  // A Pokemon that used up or lost its item is weaker than one still
+  // holding it (no more Leftovers, no second Sitrus, no Choice power).
+  itemLost: 1.5,
 };
 
 PSMomentum.parseReplay = function (logText) {
@@ -53,6 +56,9 @@ PSMomentum.parseReplay = function (logText) {
     switches: 0,
     teras: 0,
     biggestHit: null,
+    // Luck that went this side's way: crits landed, enemy misses, enemy
+    // full-paralysis/flinch/sleep turns, secondary-effect procs.
+    luckEvents: [],
   });
   const stats = { p1: newSideStats(), p2: newSideStats() };
 
@@ -69,6 +75,10 @@ PSMomentum.parseReplay = function (logText) {
   const fieldEffects = {}; // condition id -> { side }, terrains + Trick Room
 
   const other = (side) => (side === "p1" ? "p2" : "p1");
+
+  function addLuck(side, text) {
+    stats[side].luckEvents.push({ turn: currentTurn, text });
+  }
   const normId = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   // "RainDance" -> "Rain Dance"
   const spaceOut = (s) => (s || "").replace(/([a-z])([A-Z])/g, "$1 $2");
@@ -110,6 +120,7 @@ PSMomentum.parseReplay = function (logText) {
         boosts: {},
         tera: null,
         moveTypes: {},
+        itemless: false,
         dealt: 0,
         taken: 0,
         kos: 0,
@@ -132,10 +143,14 @@ PSMomentum.parseReplay = function (logText) {
     let hpSum = 0;
     let faintedCount = 0;
     let statusPen = 0;
+    let itemPen = 0;
     for (const mon of team) {
       hpSum += mon.hp;
       if (mon.fainted) faintedCount++;
-      else if (mon.status) statusPen += W.status[mon.status] || 3;
+      else {
+        if (mon.status) statusPen += W.status[mon.status] || 3;
+        if (mon.itemless) itemPen += W.itemLost;
+      }
     }
     // Pokemon not revealed yet are assumed healthy.
     hpSum += 100 * (size - team.length);
@@ -171,10 +186,12 @@ PSMomentum.parseReplay = function (logText) {
       hp,
       hazardPen,
       statusPen,
+      itemPen,
       boostBonus,
       fieldBonus,
       faintPen,
-      total: hp - hazardPen - statusPen + boostBonus + fieldBonus - faintPen,
+      total:
+        hp - hazardPen - statusPen - itemPen + boostBonus + fieldBonus - faintPen,
     };
   }
 
@@ -260,6 +277,7 @@ PSMomentum.parseReplay = function (logText) {
         Boosts: s1.boostBonus - s2.boostBonus,
         Field: s1.fieldBonus - s2.fieldBonus,
         Faints: s2.faintPen - s1.faintPen,
+        Items: s2.itemPen - s1.itemPen,
         Matchup: threatDiff,
         Speed: speedDiff,
       },
@@ -285,6 +303,9 @@ PSMomentum.parseReplay = function (logText) {
       // damage credited to the opponent.
       if (!from.includes("item") && !from.includes("recoil") && !from.includes("highjumpkick")) {
         stats[other(ident.side)].indirectDamage += delta;
+      }
+      if (from === "confusion") {
+        addLuck(other(ident.side), mon.name + " hurt itself in confusion");
       }
     } else if (lastMove && lastMove.side !== ident.side) {
       const attacker = mons.get(lastMove.key);
@@ -450,6 +471,17 @@ PSMomentum.parseReplay = function (logText) {
         // Self-inflicted status (Toxic Orb, Flame Orb, Rest) carries [from].
         if (!line.includes("[from]")) {
           stats[other(ident.side)].statusInflicted++;
+          // Status from a damaging move is a secondary-effect proc (Scald
+          // burn, Ice Beam freeze): luck. From a status move (Toxic,
+          // Will-O-Wisp): intended, not luck.
+          const data =
+            lastMove && PSMomentum.MOVES && PSMomentum.MOVES[normId(lastMove.move)];
+          if (data && data.c && lastMove.side !== ident.side) {
+            addLuck(
+              lastMove.side,
+              mon.name + " got " + (parts[3] || "statused") + " by " + lastMove.move
+            );
+          }
           turnEvents.push({
             type: "status",
             side: other(ident.side),
@@ -462,6 +494,33 @@ PSMomentum.parseReplay = function (logText) {
       case "-curestatus": {
         const ident = parseIdent(parts[2]);
         if (ident) getMon(ident).status = null;
+        break;
+      }
+
+      case "-enditem": {
+        // Berry eaten, item knocked off, Air Balloon popped... either way
+        // this Pokemon now fights without its item.
+        const ident = parseIdent(parts[2]);
+        if (!ident) break;
+        const mon = getMon(ident);
+        mon.itemless = true;
+        // Removal by an opposing move (Knock Off, Corrosive Gas) is a
+        // notable play; consuming your own berry is routine.
+        if (/\[from\] move:/.test(line)) {
+          turnEvents.push({
+            type: "item",
+            side: other(ident.side),
+            text: mon.name + " lost its " + (parts[3] || "item"),
+          });
+        }
+        break;
+      }
+
+      case "-item": {
+        // Gaining or revealing an item (Trick, Magician, Frisk shows the
+        // holder still has one) - it demonstrably holds an item now.
+        const ident = parseIdent(parts[2]);
+        if (ident) getMon(ident).itemless = false;
         break;
       }
 
@@ -593,11 +652,39 @@ PSMomentum.parseReplay = function (logText) {
         const ident = parseIdent(parts[2]);
         if (!ident) break;
         stats[other(ident.side)].critsLanded++;
+        addLuck(other(ident.side), "Critical hit on " + getMon(ident).name);
         turnEvents.push({
           type: "crit",
           side: other(ident.side),
           text: "Critical hit on " + getMon(ident).name,
         });
+        break;
+      }
+
+      case "-miss": {
+        // Only a natural miss (move accuracy < 100) is luck; a miss against
+        // a Fly/Dig turn or after evasion boosts is play, not chance.
+        const src = parseIdent(parts[2]);
+        if (!src || !lastMove) break;
+        const data = PSMomentum.MOVES && PSMomentum.MOVES[normId(lastMove.move)];
+        if (data && data.a) {
+          addLuck(
+            other(src.side),
+            lastMove.move + " missed (" + data.a + "% accurate)"
+          );
+        }
+        break;
+      }
+
+      case "cant": {
+        const ident = parseIdent(parts[2]);
+        if (!ident) break;
+        const reason = normId(parts[3]);
+        const name = getMon(ident).name;
+        if (reason === "par") addLuck(other(ident.side), name + " was fully paralyzed");
+        else if (reason === "flinch") addLuck(other(ident.side), name + " flinched");
+        else if (reason === "slp") addLuck(other(ident.side), name + " stayed asleep");
+        else if (reason === "frz") addLuck(other(ident.side), name + " stayed frozen");
         break;
       }
 
