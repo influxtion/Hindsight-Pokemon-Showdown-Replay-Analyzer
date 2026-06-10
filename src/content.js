@@ -6,8 +6,10 @@
   let lastPath = null;
 
   function isReplayPath(path) {
-    // e.g. /gen9ou-2270001234 or /gen9randombattle-123456-abcdef
-    return /^\/[a-z0-9]+-\d+(-[a-z0-9]+)?$/i.test(path);
+    // Replay ids are dash-joined: format-number (/gen9ou-2270001234),
+    // server-format-number (/smogtours-gen5ou-59402), and private replays
+    // append a password segment (/gen9ou-123456-abc...pw).
+    return /^\/([a-z0-9]+-)+\d+(-[a-z0-9]+)?$/i.test(path);
   }
 
   async function getLog() {
