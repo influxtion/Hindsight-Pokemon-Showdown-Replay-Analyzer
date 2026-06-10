@@ -252,16 +252,19 @@
     );
 
     // Luck: chance events (crits, natural misses, full paralysis, flinches,
-    // sleep rolls, secondary procs) and who they favored.
-    const luck1 = parsed.stats.p1.luckEvents;
-    const luck2 = parsed.stats.p2.luckEvents;
-    if (luck1.length || luck2.length) {
+    // sleep rolls, secondary procs), weighted by improbability and by how
+    // much they actually swung the game.
+    const luck1 = insights.luck.p1;
+    const luck2 = insights.luck.p2;
+    if (luck1.events.length || luck2.events.length) {
       const box = section(body, "Luck");
-      box.appendChild(metricRow("Breaks in their favor", luck1.length, luck2.length));
-      const all = luck1
-        .map((e) => ({ turn: e.turn, text: e.text, side: "p1" }))
-        .concat(luck2.map((e) => ({ turn: e.turn, text: e.text, side: "p2" })))
-        .sort((a, b) => a.turn - b.turn);
+      box.appendChild(
+        metricRow("Luck points", luck1.score, luck2.score, String(luck1.score), String(luck2.score))
+      );
+      const all = luck1.events
+        .map((e) => ({ ...e, side: "p1" }))
+        .concat(luck2.events.map((e) => ({ ...e, side: "p2" })))
+        .sort((a, b) => b.weight - a.weight);
       const MAX_SHOWN = 6;
       for (const ev of all.slice(0, MAX_SHOWN)) {
         const item = el("div", "psm-moment psm-moment-" + ev.side);
@@ -271,21 +274,31 @@
       }
       if (all.length > MAX_SHOWN) {
         box.appendChild(
-          el("div", "psm-note", "+ " + (all.length - MAX_SHOWN) + " more chance events.")
+          el(
+            "div",
+            "psm-note",
+            "Biggest breaks shown; " + (all.length - MAX_SHOWN) + " smaller ones omitted."
+          )
         );
       }
-      const luckDiff = luck1.length - luck2.length;
-      if (Math.abs(luckDiff) >= 3) {
+      const luckDiff = luck1.score - luck2.score;
+      if (Math.abs(luckDiff) >= 2) {
         const lucky = luckDiff > 0 ? "p1" : "p2";
         box.appendChild(
           el(
             "div",
             "psm-note",
-            "The dice favored " + parsed.players[lucky] + " in this one (" +
-              Math.abs(luckDiff) + " more breaks)."
+            "The dice favored " + parsed.players[lucky] + " in this one."
           )
         );
       }
+      box.appendChild(
+        el(
+          "div",
+          "psm-note",
+          "Each break counts for how unlikely it was times how much it swung the game."
+        )
+      );
     }
 
     // Per-Pokemon breakdown with damage bars scaled per column.

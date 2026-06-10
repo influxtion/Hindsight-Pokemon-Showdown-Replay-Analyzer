@@ -47,6 +47,27 @@ PSMomentum.analyze = function (parsed) {
     ? swings.reduce((a, b) => (Math.abs(b.delta) > Math.abs(a.delta) ? b : a))
     : null;
 
+  // Weighted luck: each break counts for its improbability (a crit is
+  // rarer than a Scald burn) times its impact (how much that turn actually
+  // swung toward the beneficiary - a crit into a KO matters, a crit on a
+  // wall that shrugged it off does not).
+  const swingByTurn = {};
+  for (const s of swings) swingByTurn[s.turn] = s.delta;
+  const luck = {};
+  for (const side of ["p1", "p2"]) {
+    const sign = side === "p1" ? 1 : -1;
+    const events = parsed.stats[side].luckEvents.map((ev) => {
+      const toward = (swingByTurn[ev.turn] || 0) * sign;
+      const impact = Math.max(0.25, Math.min(2, toward / 10));
+      return { turn: ev.turn, text: ev.text, weight: ev.p * impact };
+    });
+    events.sort((a, b) => b.weight - a.weight);
+    luck[side] = {
+      score: Math.round(10 * events.reduce((sum, ev) => sum + ev.weight, 0)) / 10,
+      events,
+    };
+  }
+
   // A comeback: the winner was behind by 20+ momentum at some point.
   let comeback = false;
   if (parsed.winner === "p1" || parsed.winner === "p2") {
@@ -59,6 +80,7 @@ PSMomentum.analyze = function (parsed) {
     leadChanges,
     biggestSwing,
     topSwings,
+    luck,
     comeback,
     control: {
       p1: Math.round((100 * p1Ahead) / total),

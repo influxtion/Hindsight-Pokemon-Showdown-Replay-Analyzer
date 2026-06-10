@@ -29,6 +29,12 @@ async function main() {
     // Accuracy only when the move can naturally miss; misses of perfect-
     // accuracy moves come from semi-invulnerability or evasion, not luck.
     if (typeof m.accuracy === "number" && m.accuracy < 100) moves[id].a = m.accuracy;
+    // Secondary effect chance (Scald burn 30, Nuzzle paralysis 100...),
+    // used to weight procs by improbability - and to weight guaranteed
+    // effects to zero, since they are not luck at all.
+    const secondaries = m.secondaries || (m.secondary ? [m.secondary] : []);
+    const chances = secondaries.map((s) => s.chance).filter((c) => typeof c === "number");
+    if (chances.length) moves[id].sc = Math.max(...chances);
   }
 
   const out =

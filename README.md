@@ -102,9 +102,13 @@ you can iterate on the parser or momentum formula quickly.
   misses (the move's real accuracy is checked, so a miss against a Fly
   turn doesn't count), full paralysis, flinches, extra sleep/freeze
   turns, confusion self-hits, and secondary-effect procs like Scald
-  burns - tallied per player, with a note when the dice clearly favored
-  one side. Damage rolls (85-100%) are the one kind of luck a replay
-  cannot expose, since exact stats are hidden.
+  burns. Breaks are not all equal: each one is weighted by its
+  improbability (a 1-in-24 crit outweighs a 30% burn, and a guaranteed
+  effect like Nuzzle's paralysis weighs zero) times its impact (how much
+  that turn actually swung momentum toward the beneficiary). The panel
+  shows each player's luck-point total and the biggest breaks first.
+  Damage rolls (85-100%) are the one kind of luck a replay cannot
+  expose, since exact stats are hidden.
 - Per-Pokemon breakdowns for both teams: damage dealt, damage taken, KOs,
   and when each one went down.
 

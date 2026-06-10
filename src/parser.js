@@ -76,8 +76,19 @@ PSMomentum.parseReplay = function (logText) {
 
   const other = (side) => (side === "p1" ? "p2" : "p1");
 
-  function addLuck(side, text) {
-    stats[side].luckEvents.push({ turn: currentTurn, text });
+  // p is the improbability of the break (0..1): how unlikely the favorable
+  // outcome was. A guaranteed effect (p <= 0) is not luck and is dropped.
+  function addLuck(side, text, p) {
+    if (p <= 0) return;
+    stats[side].luckEvents.push({ turn: currentTurn, text, p });
+  }
+
+  // Improbability of a secondary-effect proc, from the move's listed
+  // chance: Scald burn (30%) -> 0.7, Nuzzle paralysis (100%) -> 0.
+  function procImprobability(moveName) {
+    const data = PSMomentum.MOVES && PSMomentum.MOVES[normId(moveName)];
+    if (data && typeof data.sc === "number") return 1 - data.sc / 100;
+    return 0.7;
   }
   const normId = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   // "RainDance" -> "Rain Dance"
@@ -305,7 +316,8 @@ PSMomentum.parseReplay = function (logText) {
         stats[other(ident.side)].indirectDamage += delta;
       }
       if (from === "confusion") {
-        addLuck(other(ident.side), mon.name + " hurt itself in confusion");
+        // 33% self-hit chance in current gens
+        addLuck(other(ident.side), mon.name + " hurt itself in confusion", 0.67);
       }
     } else if (lastMove && lastMove.side !== ident.side) {
       const attacker = mons.get(lastMove.key);
@@ -479,7 +491,8 @@ PSMomentum.parseReplay = function (logText) {
           if (data && data.c && lastMove.side !== ident.side) {
             addLuck(
               lastMove.side,
-              mon.name + " got " + (parts[3] || "statused") + " by " + lastMove.move
+              mon.name + " got " + (parts[3] || "statused") + " by " + lastMove.move,
+              procImprobability(lastMove.move)
             );
           }
           turnEvents.push({
@@ -652,7 +665,8 @@ PSMomentum.parseReplay = function (logText) {
         const ident = parseIdent(parts[2]);
         if (!ident) break;
         stats[other(ident.side)].critsLanded++;
-        addLuck(other(ident.side), "Critical hit on " + getMon(ident).name);
+        // 1/24 base crit rate in current gens
+        addLuck(other(ident.side), "Critical hit on " + getMon(ident).name, 0.96);
         turnEvents.push({
           type: "crit",
           side: other(ident.side),
@@ -670,7 +684,8 @@ PSMomentum.parseReplay = function (logText) {
         if (data && data.a) {
           addLuck(
             other(src.side),
-            lastMove.move + " missed (" + data.a + "% accurate)"
+            lastMove.move + " missed (" + data.a + "% accurate)",
+            data.a / 100
           );
         }
         break;
@@ -681,10 +696,18 @@ PSMomentum.parseReplay = function (logText) {
         if (!ident) break;
         const reason = normId(parts[3]);
         const name = getMon(ident).name;
-        if (reason === "par") addLuck(other(ident.side), name + " was fully paralyzed");
-        else if (reason === "flinch") addLuck(other(ident.side), name + " flinched");
-        else if (reason === "slp") addLuck(other(ident.side), name + " stayed asleep");
-        else if (reason === "frz") addLuck(other(ident.side), name + " stayed frozen");
+        if (reason === "par") {
+          addLuck(other(ident.side), name + " was fully paralyzed", 0.75);
+        } else if (reason === "flinch") {
+          // Weight by the flinch chance of the move that caused it; a Fake
+          // Out flinch (100%) weighs zero.
+          const p = lastMove ? procImprobability(lastMove.move) : 0.7;
+          addLuck(other(ident.side), name + " flinched", p);
+        } else if (reason === "slp") {
+          addLuck(other(ident.side), name + " stayed asleep", 0.5);
+        } else if (reason === "frz") {
+          addLuck(other(ident.side), name + " stayed frozen", 0.2);
+        }
         break;
       }
 
