@@ -1,16 +1,7 @@
-// Parses a Pokemon Showdown battle log (the |command|arg|arg protocol) into
-// per-turn momentum snapshots, per-Pokemon stats, and a list of notable
-// events.
-//
-// The momentum score for a side combines:
-//   - total remaining team health (the base, 0..100)
-//   - entry hazards on its own field (a tax on every future switch,
-//     scaled by how many Pokemon are left to switch in)
-//   - status conditions on living team members
-//   - stat boosts on its active Pokemon (setup = pressure)
-//   - screens / Tailwind (defensive buffer and speed control)
-//   - an extra penalty per fainted Pokemon (lost options)
+// Parses a Showdown battle log (|command|arg|arg protocol) into per-turn
+// momentum snapshots, per-Pokemon stats, and notable events.
 // m = score(p1) - score(p2), clamped to -100..100. Positive = p1 ahead.
+// See README for the scoring model.
 window.PSMomentum = window.PSMomentum || {};
 
 PSMomentum.WEIGHTS = {
@@ -20,17 +11,11 @@ PSMomentum.WEIGHTS = {
   boostPerStage: 1.5,
   boostCap: 9,
   faintedExtra: 2,
-  // Active-matchup factors: points per doubling of type effectiveness
-  // advantage, and a flat edge when one active has been observed to move
-  // first (inferred from move order, so EVs/items are accounted for).
-  threatPerStep: 1.5,
-  speedEdge: 2.5,
-  // Weather and terrain are credited to whoever set them while they last.
-  weatherBonus: 2.5,
+  threatPerStep: 1.5, // per doubling of type effectiveness
+  speedEdge: 2.5, // needs an observed move-order fact
+  weatherBonus: 2.5, // credited to the setter while active
   terrainBonus: 2.5,
-  // A Pokemon that used up or lost its item is weaker than one still
-  // holding it (no more Leftovers, no second Sitrus, no Choice power).
-  itemLost: 1.5,
+  itemLost: 1.5, // living mon that used or lost its item
 };
 
 PSMomentum.parseReplay = function (logText) {
@@ -56,9 +41,7 @@ PSMomentum.parseReplay = function (logText) {
     switches: 0,
     teras: 0,
     biggestHit: null,
-    // Luck that went this side's way: crits landed, enemy misses, enemy
-    // full-paralysis/flinch/sleep turns, secondary-effect procs.
-    luckEvents: [],
+    luckEvents: [], // chance events that favored this side
   });
   const stats = { p1: newSideStats(), p2: newSideStats() };
 
@@ -68,11 +51,9 @@ PSMomentum.parseReplay = function (logText) {
   let turnEvents = [];
   let winner = null;
   let lastMove = null; // { key, side, move }
-  // Accuracy bookkeeping: landing an imperfect-accuracy move is mild luck
-  // for the user, mirroring how a miss is luck for the defender. Tracked
-  // per side and move, aggregated into one ledger entry at the end.
+  // hits/misses per inaccurate move; landed hits count as luck for the user
   const accUsage = { p1: {}, p2: {} }; // side -> move -> {hits, misses, acc}
-  let pendingAcc = null; // { side, move } - an accuracy roll not yet resolved
+  let pendingAcc = null; // { side, move }, unresolved accuracy roll
 
   function resolvePendingAcc(hit) {
     if (!pendingAcc) return;
@@ -91,15 +72,13 @@ PSMomentum.parseReplay = function (logText) {
 
   const other = (side) => (side === "p1" ? "p2" : "p1");
 
-  // p is the improbability of the break (0..1): how unlikely the favorable
-  // outcome was. A guaranteed effect (p <= 0) is not luck and is dropped.
+  // p = how unlikely the break was (0..1); guaranteed effects don't count
   function addLuck(side, text, p) {
     if (p <= 0) return;
     stats[side].luckEvents.push({ turn: currentTurn, text, p });
   }
 
-  // Improbability of a secondary-effect proc, from the move's listed
-  // chance: Scald burn (30%) -> 0.7, Nuzzle paralysis (100%) -> 0.
+  // 1 - secondary chance: Scald burn -> 0.7, Nuzzle para -> 0
   function procImprobability(moveName) {
     const data = PSMomentum.MOVES && PSMomentum.MOVES[normId(moveName)];
     if (data && typeof data.sc === "number") return 1 - data.sc / 100;
@@ -178,11 +157,11 @@ PSMomentum.parseReplay = function (logText) {
         if (mon.itemless) itemPen += W.itemLost;
       }
     }
-    // Pokemon not revealed yet are assumed healthy.
+    // unrevealed mons count as healthy
     hpSum += 100 * (size - team.length);
     const hp = hpSum / size;
 
-    // Hazards matter less when there are fewer Pokemon left to switch in.
+    // hazards matter less with fewer switch-ins left
     const remainFrac = (size - faintedCount) / size;
     let hazardPen = 0;
     let fieldBonus = 0;
@@ -190,13 +169,12 @@ PSMomentum.parseReplay = function (logText) {
       if (W.hazards[cond]) hazardPen += W.hazards[cond] * layers * remainFrac;
       if (W.field[cond]) fieldBonus += W.field[cond];
     }
-    // Weather/terrain/Trick Room benefit whoever chose to set them.
     if (weather && weather.side === side) fieldBonus += W.weatherBonus;
     for (const eff of Object.values(fieldEffects)) {
       if (eff.side === side) fieldBonus += W.terrainBonus;
     }
 
-    // Net boost stages across this side's active Pokemon.
+    // net boost stages on this side's actives
     let stages = 0;
     for (const pos of Object.keys(active)) {
       if (!pos.startsWith(side)) continue;
@@ -225,9 +203,7 @@ PSMomentum.parseReplay = function (logText) {
     return (PSMomentum.DEX && PSMomentum.DEX[normId(mon.species)]) || null;
   }
 
-  // Status severity depends on the victim, not just the status: a burn
-  // cripples a physical attacker (2..6 by attack lean), paralysis cripples
-  // a fast Pokemon (2..5 by base Speed). Others use flat weights.
+  // brn scales with the victim's physical lean, par with its base Speed
   function statusWeight(mon) {
     const entry = dexEntry(mon);
     if (entry) {
@@ -242,7 +218,7 @@ PSMomentum.parseReplay = function (logText) {
     return base !== undefined ? base : 3;
   }
 
-  // A Pokemon's current defensive typing (Tera overrides, except Stellar).
+  // current typing; Tera overrides, except Stellar
   function typesOf(mon) {
     if (mon.tera && mon.tera !== "Stellar") return [mon.tera];
     const entry = dexEntry(mon);
@@ -257,8 +233,7 @@ PSMomentum.parseReplay = function (logText) {
     return mult;
   }
 
-  // How hard `attacker` can hit `defender`: the best type effectiveness
-  // among its revealed attacking types plus its own (assumed STAB) types.
+  // best effectiveness among revealed attack types + assumed STAB
   function threat(attacker, defender) {
     const defTypes = typesOf(defender);
     if (!defTypes.length) return 1;
@@ -285,19 +260,17 @@ PSMomentum.parseReplay = function (logText) {
     const s1 = sideScore("p1");
     const s2 = sideScore("p2");
 
-    // Active matchup: who threatens whom right now, and who is faster.
     let threatDiff = 0;
     let speedDiff = 0;
     const a1 = activeMon("p1");
     const a2 = activeMon("p2");
     if (a1 && a2) {
-      // log2 of the effectiveness multiplier: 4x = +2 steps, immune = -3.
+      // log2 of the multiplier: 4x = +2 steps, immune = -3
       const steps = (x) => Math.log2(Math.max(x, 0.125));
       threatDiff = W.threatPerStep * (steps(threat(a1, a2)) - steps(threat(a2, a1)));
-      // Speed edge only when move order has actually shown who is faster.
       if (fasterThan.has(a1.key + ">" + a2.key)) speedDiff = W.speedEdge;
       else if (fasterThan.has(a2.key + ">" + a1.key)) speedDiff = -W.speedEdge;
-      // Under Trick Room the slower Pokemon acts first.
+      // slower mon acts first under Trick Room
       if (fieldEffects.trickroom) speedDiff = -speedDiff;
     }
 
@@ -305,7 +278,7 @@ PSMomentum.parseReplay = function (logText) {
       m: Math.max(-100, Math.min(100, s1.total - s2.total + threatDiff + speedDiff)),
       p1Pct: s1.hp,
       p2Pct: s2.hp,
-      // Positive components favor p1, negative favor p2.
+      // positive favors p1
       breakdown: {
         HP: s1.hp - s2.hp,
         Hazards: s2.hazardPen - s1.hazardPen,
@@ -347,15 +320,13 @@ PSMomentum.parseReplay = function (logText) {
     const fromMatch = /\[from\]\s*([^|[]+)/.exec(line);
     if (fromMatch) {
       const from = normId(fromMatch[1]);
-      // Life Orb, recoil, crash damage etc. are self-inflicted; everything
-      // else (hazards, status, Leech Seed, weather) counts as indirect
-      // damage credited to the opponent.
+      // hazards/status/leech count as the opponent's indirect damage;
+      // Life Orb, recoil and crash damage are self-inflicted
       if (!from.includes("item") && !from.includes("recoil") && !from.includes("highjumpkick")) {
         stats[other(ident.side)].indirectDamage += delta;
       }
       if (from === "confusion") {
-        // 33% self-hit chance in current gens
-        addLuck(other(ident.side), mon.name + " hurt itself in confusion", 0.67);
+        addLuck(other(ident.side), mon.name + " hurt itself in confusion", 0.67); // 33% self-hit
       }
     } else if (lastMove && lastMove.side !== ident.side) {
       const attacker = mons.get(lastMove.key);
@@ -371,9 +342,8 @@ PSMomentum.parseReplay = function (logText) {
           turn: currentTurn,
         };
       }
-      // Heavy hits are momentum events in their own right.
       if (delta >= 35 && attacker) {
-        // Mirror matches: both sides can field the same Pokemon.
+        // disambiguate mirror species
         const sameName = attacker.name === mon.name;
         const atkName = sameName
           ? attacker.name + " (" + players[lastMove.side] + ")"
@@ -453,10 +423,8 @@ PSMomentum.parseReplay = function (logText) {
       case "move": {
         const ident = parseIdent(parts[2]);
         if (!ident) break;
-        // The previous accuracy roll resolved without a miss: it hit.
-        resolvePendingAcc(true);
+        resolvePendingAcc(true); // previous roll didn't miss
         lastMove = { key: ident.key, side: ident.side, move: parts[3] };
-        // Remember each Pokemon's revealed attacking types.
         const data = PSMomentum.MOVES && PSMomentum.MOVES[normId(parts[3])];
         if (data && data.c) getMon(ident).moveTypes[data.t] = true;
         if (data && data.a) {
@@ -464,10 +432,7 @@ PSMomentum.parseReplay = function (logText) {
           if (!book[parts[3]]) book[parts[3]] = { hits: 0, misses: 0, acc: data.a };
           pendingAcc = { side: ident.side, move: parts[3] };
         }
-        // Move order reveals who is actually faster: if both actives used
-        // same-priority moves this turn, the first mover outspeeds. This
-        // bakes in EVs, natures, and Choice Scarf, which the log never
-        // shows directly. Skipped under Trick Room.
+        // first of two same-priority moves in a turn is the faster mon
         const prio = (data && data.p) || 0;
         if (
           lastTurnMove &&
@@ -528,12 +493,10 @@ PSMomentum.parseReplay = function (logText) {
         if (!ident) break;
         const mon = getMon(ident);
         mon.status = parts[3] || null;
-        // Self-inflicted status (Toxic Orb, Flame Orb, Rest) carries [from].
+        // self-inflicted status (Toxic Orb, Rest) carries [from]
         if (!line.includes("[from]")) {
           stats[other(ident.side)].statusInflicted++;
-          // Status from a damaging move is a secondary-effect proc (Scald
-          // burn, Ice Beam freeze): luck. From a status move (Toxic,
-          // Will-O-Wisp): intended, not luck.
+          // proc from a damaging move = luck; a status move is intent
           const data =
             lastMove && PSMomentum.MOVES && PSMomentum.MOVES[normId(lastMove.move)];
           if (data && data.c && lastMove.side !== ident.side) {
@@ -559,14 +522,12 @@ PSMomentum.parseReplay = function (logText) {
       }
 
       case "-enditem": {
-        // Berry eaten, item knocked off, Air Balloon popped... either way
-        // this Pokemon now fights without its item.
+        // berry eaten, Knock Off, balloon popped: fights itemless now
         const ident = parseIdent(parts[2]);
         if (!ident) break;
         const mon = getMon(ident);
         mon.itemless = true;
-        // Removal by an opposing move (Knock Off, Corrosive Gas) is a
-        // notable play; consuming your own berry is routine.
+        // removal by a move is worth surfacing; eating your berry isn't
         if (/\[from\] move:/.test(line)) {
           turnEvents.push({
             type: "item",
@@ -578,8 +539,7 @@ PSMomentum.parseReplay = function (logText) {
       }
 
       case "-item": {
-        // Gaining or revealing an item (Trick, Magician, Frisk shows the
-        // holder still has one) - it demonstrably holds an item now.
+        // Trick/Magician/Frisk: the holder demonstrably has an item
         const ident = parseIdent(parts[2]);
         if (ident) getMon(ident).itemless = false;
         break;
@@ -593,10 +553,8 @@ PSMomentum.parseReplay = function (logText) {
         const stat = parts[3];
         const amt = (parseInt(parts[4], 10) || 0) * (cmd === "-boost" ? 1 : -1);
         mon.boosts[stat] = Math.max(-6, Math.min(6, (mon.boosts[stat] || 0) + amt));
-        // Stat changes from a move's secondary effect are luck: Shadow
-        // Ball's 20% Sp. Def drop, Meteor Mash's 20% Attack boost.
-        // Deliberate stat moves (Swords Dance: a status move) and
-        // guaranteed riders (Acid Spray: 100%) weigh nothing.
+        // secondary stat changes (Shadow Ball drop, Meteor Mash boost) are
+        // luck; status moves and 100% riders aren't
         if (!line.includes("[from]") && lastMove) {
           const md = PSMomentum.MOVES && PSMomentum.MOVES[normId(lastMove.move)];
           if (md && md.c && typeof md.sc === "number") {
@@ -621,9 +579,8 @@ PSMomentum.parseReplay = function (logText) {
       }
 
       case "-start": {
-        // Confusion is a volatile, not a status line. From a damaging move
-        // (Hurricane 30%) it is a luck proc; from Confuse Ray it is intent,
-        // and Outrage fatigue ([fatigue]) is self-inflicted.
+        // confusion from a damaging move (Hurricane) is a proc;
+        // Confuse Ray is intent, [fatigue] is Outrage's own doing
         const ident = parseIdent(parts[2]);
         if (!ident) break;
         if (
@@ -712,7 +669,7 @@ PSMomentum.parseReplay = function (logText) {
           break;
         }
         if (line.includes("[upkeep]")) break;
-        // Setter: the [of] Pokemon (ability weather) or whoever just moved.
+        // setter = the [of] mon (ability weather) or whoever just moved
         const of = /\[of\]\s*(p[12])/.exec(line);
         weather = {
           id: normId(parts[2]),
@@ -727,7 +684,7 @@ PSMomentum.parseReplay = function (logText) {
         if (!cond) break;
         const of = /\[of\]\s*(p[12])/.exec(line);
         const side = of ? of[1] : lastMove ? lastMove.side : null;
-        // A new terrain replaces any existing one.
+        // terrains replace each other
         if (cond.endsWith("terrain")) {
           for (const k of Object.keys(fieldEffects)) {
             if (k.endsWith("terrain")) delete fieldEffects[k];
@@ -761,8 +718,7 @@ PSMomentum.parseReplay = function (logText) {
         const ident = parseIdent(parts[2]);
         if (!ident) break;
         stats[other(ident.side)].critsLanded++;
-        // 1/24 base crit rate in current gens
-        addLuck(other(ident.side), "Critical hit on " + getMon(ident).name, 0.96);
+        addLuck(other(ident.side), "Critical hit on " + getMon(ident).name, 0.96); // 1/24 base rate
         turnEvents.push({
           type: "crit",
           side: other(ident.side),
@@ -772,8 +728,7 @@ PSMomentum.parseReplay = function (logText) {
       }
 
       case "-miss": {
-        // Only a natural miss (move accuracy < 100) is luck; a miss against
-        // a Fly/Dig turn or after evasion boosts is play, not chance.
+        // only natural misses (acc < 100) are luck; Fly turns and evasion aren't
         const src = parseIdent(parts[2]);
         if (!src || !lastMove) break;
         resolvePendingAcc(false);
@@ -796,8 +751,7 @@ PSMomentum.parseReplay = function (logText) {
         if (reason === "par") {
           addLuck(other(ident.side), name + " was fully paralyzed", 0.75);
         } else if (reason === "flinch") {
-          // Weight by the flinch chance of the move that caused it; a Fake
-          // Out flinch (100%) weighs zero.
+          // weight by the move's flinch chance; Fake Out's 100% weighs zero
           const p = lastMove ? procImprobability(lastMove.move) : 0.7;
           addLuck(other(ident.side), name + " flinched", p);
         } else if (reason === "slp") {
@@ -820,21 +774,20 @@ PSMomentum.parseReplay = function (logText) {
         break;
 
       case "-fail":
-        // The move never connected; no accuracy luck either way.
+        // never connected, no accuracy roll
         pendingAcc = null;
         break;
 
       case "-activate":
-        // Blocked by Protect/Detect etc. - no accuracy roll happened.
+        // blocked by Protect etc, no accuracy roll
         if (/protect|detect|king's shield|spiky shield|baneful bunker/i.test(parts[3] || "")) {
           pendingAcc = null;
         }
         break;
     }
 
-    // Attribute this line's momentum change to any events it produced, so
-    // each action carries its own point swing. (snapshot() resets the
-    // event list, so skip the bookkeeping on turn boundaries.)
+    // give each event this line's momentum change; skip turn boundaries
+    // since snapshot() just flushed the event list
     if (cmd !== "turn" && turnEvents.length > eventsBefore) {
       const mNow = computeMomentum().m;
       const added = turnEvents.length - eventsBefore;
@@ -848,9 +801,8 @@ PSMomentum.parseReplay = function (logText) {
   }
   resolvePendingAcc(true);
 
-  // Aggregate accuracy luck: each landed hit of an imperfect move is worth
-  // its miss chance. (Each miss was already credited to the defender, so
-  // playing exactly to the odds nets out to zero.)
+  // each landed hit of an inaccurate move is worth its miss chance;
+  // misses already credited the defender, so playing to the odds nets zero
   for (const side of ["p1", "p2"]) {
     for (const [move, u] of Object.entries(accUsage[side])) {
       const weight = u.hits * (1 - u.acc / 100);
@@ -866,7 +818,7 @@ PSMomentum.parseReplay = function (logText) {
     }
   }
 
-  // Capture the post-battle state as a final point.
+  // final state
   if (currentTurn > 0) {
     snapshot(currentTurn, "Turn " + currentTurn);
     snapshot(currentTurn + 1, "End");

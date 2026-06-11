@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 
-// In a browser, properties of `window` are also globals; emulate that here.
+// window properties are globals in a browser
 global.window = global;
 const root = path.join(__dirname, "..");
 eval(fs.readFileSync(path.join(root, "src", "data", "typechart.js"), "utf8"));

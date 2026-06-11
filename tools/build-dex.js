@@ -1,8 +1,5 @@
-// Regenerates src/data/dex.js from Pokemon Showdown's public data files.
+// Regenerates src/data/dex.js from Showdown's public data files.
 // Run with: node tools/build-dex.js
-//
-// Keeps only what the momentum model needs: each species' types and base
-// Speed, and each move's type and whether it deals damage.
 const fs = require("fs");
 const path = require("path");
 
@@ -19,8 +16,7 @@ async function main() {
   const dex = {};
   for (const [id, p] of Object.entries(pokedex)) {
     if (!p.types || !p.baseStats) continue;
-    // Attack/Sp.Atk are kept so status severity can consider the victim:
-    // a burn hurts a physical attacker far more than a special one.
+    // atk/spa let status severity consider the victim
     dex[id] = { t: p.types, s: p.baseStats.spe, at: p.baseStats.atk, sa: p.baseStats.spa };
   }
   const moves = {};
@@ -28,12 +24,9 @@ async function main() {
     if (!m.type) continue;
     moves[id] = { t: m.type, c: m.category === "Status" ? 0 : 1 };
     if (m.priority) moves[id].p = m.priority;
-    // Accuracy only when the move can naturally miss; misses of perfect-
-    // accuracy moves come from semi-invulnerability or evasion, not luck.
+    // accuracy only when the move can naturally miss
     if (typeof m.accuracy === "number" && m.accuracy < 100) moves[id].a = m.accuracy;
-    // Secondary effect chance (Scald burn 30, Nuzzle paralysis 100...),
-    // used to weight procs by improbability - and to weight guaranteed
-    // effects to zero, since they are not luck at all.
+    // secondary chance, for weighting procs (100% = not luck)
     const secondaries = m.secondaries || (m.secondary ? [m.secondary] : []);
     const chances = secondaries.map((s) => s.chance).filter((c) => typeof c === "number");
     if (chances.length) moves[id].sc = Math.max(...chances);

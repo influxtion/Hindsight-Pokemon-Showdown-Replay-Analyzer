@@ -6,16 +6,15 @@
   let lastPath = null;
 
   function isReplayPath(path) {
-    // Replay ids are dash-joined: format-number (/gen9ou-2270001234),
-    // server-format-number (/smogtours-gen5ou-59402), and private replays
-    // append a password segment (/gen9ou-123456-abc...pw).
+    // /gen9ou-2270001234, /smogtours-gen5ou-59402, private replays
+    // tack on a password segment
     return /^\/([a-z0-9]+-)+\d+(-[a-z0-9]+)?$/i.test(path);
   }
 
   async function getLog() {
     const el = document.querySelector("script.battle-log-data");
     if (el && el.textContent.trim()) return el.textContent;
-    // Fallback: every replay also serves its raw log at <url>.log
+    // every replay serves its raw log at <url>.log
     try {
       const res = await fetch(location.origin + location.pathname + ".log");
       if (res.ok) {
@@ -64,8 +63,7 @@
     return w + " won a close one.";
   }
 
-  // A label row with the two players' values, over a single bar split in
-  // their colors by share. Reads at a glance instead of as a table row.
+  // label row over a bar split by share in the player colors
   function metricRow(label, n1, n2, d1, d2) {
     const row = el("div", "psm-metric");
     const head = el("div", "psm-metric-head");
@@ -87,7 +85,7 @@
     return row;
   }
 
-  // A small number plus a thin bar scaled against the column's max value.
+  // number plus a thin bar scaled to the column max
   function miniStat(value, max, fillClass) {
     const cell = el("td", "psm-ministat");
     cell.appendChild(el("span", "", Math.round(value) + "%"));
@@ -133,7 +131,7 @@
       el("div", "psm-hint", "Hover the chart to see what drove each turn.")
     );
 
-    // Live card that follows the replay as it plays.
+    // follows the replay as it plays
     const nowCard = el("div", "psm-now");
     const nowHead = el("div", "psm-now-head");
     nowHead.appendChild(el("span", "psm-section-title", "Now playing"));
@@ -190,8 +188,8 @@
         nowContent.appendChild(row);
       }
 
-      // Which factors moved this turn (covers chip damage, healing, and
-      // anything else that happened without a headline event).
+      // factors that moved this turn; catches chip damage and healing
+      // that had no headline event
       if (prev) {
         const moved = Object.keys(point.breakdown)
           .map((k) => ({ k, d: point.breakdown[k] - prev.breakdown[k] }))
@@ -212,8 +210,7 @@
     }
     body.appendChild(el("div", verdictClass, verdictText(parsed, insights)));
 
-    // Turning points: one card per big swing, led by the swing size in the
-    // beneficiary's color.
+    // one card per big swing
     if (insights.topSwings.length) {
       const box = section(body, "Turning points");
       for (const s of insights.topSwings) {
@@ -240,7 +237,7 @@
       }
     }
 
-    // Timeline of notable events, color-coded by the player involved.
+    // key moments timeline
     const moments = [];
     for (const p of parsed.points) {
       for (const ev of p.events) {
@@ -262,7 +259,6 @@
       }
     }
 
-    // Head-to-head, drawn as share bars instead of a numbers table.
     const statsBox = section(body, "Match stats");
     const s1 = parsed.stats.p1;
     const s2 = parsed.stats.p2;
@@ -324,9 +320,7 @@
       )
     );
 
-    // Luck: chance events (crits, natural misses, full paralysis, flinches,
-    // sleep rolls, secondary procs), weighted by improbability and by how
-    // much they actually swung the game.
+    // luck ledger, biggest breaks first
     const luck1 = insights.luck.p1;
     const luck2 = insights.luck.p2;
     if (luck1.events.length || luck2.events.length) {
@@ -374,7 +368,7 @@
       );
     }
 
-    // Per-Pokemon breakdown with damage bars scaled per column.
+    // per-Pokemon tables, bars scaled per column
     const allMons = parsed.pokemon.p1.concat(parsed.pokemon.p2);
     const maxDealt = Math.max(1, ...allMons.map((m) => m.dealt));
     const maxTaken = Math.max(1, ...allMons.map((m) => m.taken));
@@ -416,8 +410,7 @@
     return { panel, canvas, updateNow };
   }
 
-  // Watch the replay player's battle log for new turn headers so the panel
-  // can follow playback (including seeking backwards).
+  // watch the battle log for turn headers so the panel follows playback
   let playbackObserver = null;
   function watchPlayback(onTurn) {
     let lastTurn = null;
@@ -443,8 +436,7 @@
 
   let initGen = 0;
   async function init() {
-    // If the URL changes while we are fetching, a newer init supersedes
-    // this one; bail instead of rendering a panel for the wrong replay.
+    // a newer init supersedes this one if the URL changes mid-fetch
     const gen = ++initGen;
     try {
       console.log("[Hindsight] init, path =", location.pathname);
@@ -478,7 +470,7 @@
     }
   }
 
-  // The replay site can navigate client-side, so watch for URL changes.
+  // the replay site navigates client-side
   setInterval(() => {
     if (location.pathname !== lastPath) {
       lastPath = location.pathname;

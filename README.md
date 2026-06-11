@@ -1,135 +1,98 @@
 # Hindsight
 
-A Chrome extension that overlays a momentum graph and match analysis on
-[Pokemon Showdown replay pages](https://replay.pokemonshowdown.com). Open any
-replay and a panel appears with a turn-by-turn momentum chart, key moments
-(KOs, the biggest swing of the game), and side-by-side match stats.
+Chrome extension that overlays a momentum graph and match analysis on
+[Pokemon Showdown replays](https://replay.pokemonshowdown.com). Open a
+replay and a panel shows up with a turn-by-turn momentum chart, turning
+points, a luck ledger, head-to-head stats, and per-Pokemon breakdowns.
+It follows the replay as it plays.
 
-## Installing (developer mode)
+## Install (developer mode)
 
-1. Open `chrome://extensions` in Chrome (or Edge: `edge://extensions`).
-2. Turn on "Developer mode" (top right).
-3. Click "Load unpacked" and select this folder.
-4. Open any replay, e.g. one from https://replay.pokemonshowdown.com/ — the
-   panel shows up in the top right of the page.
+1. Open `chrome://extensions` (Edge: `edge://extensions`).
+2. Turn on Developer mode.
+3. Click "Load unpacked" and pick this folder.
+4. Open any replay. The panel appears top right.
 
-No build step. Edit a file, hit the reload button on the extension card, and
-refresh the replay page.
+No build step. Edit a file, reload the extension, refresh the page.
 
-## How momentum is measured
+## The momentum score
 
-Each side gets a per-turn score and momentum is the difference, clamped to
--100..+100 (positive means player 1 is ahead). The score starts from total
-remaining team health (unrevealed Pokemon count as healthy) and is adjusted
-for the things players actually weigh:
+Each side gets a score per turn; momentum is the difference, clamped to
+-100..+100. Positive means player 1 is ahead. The base is remaining team
+HP (unrevealed Pokemon count as healthy), adjusted for:
 
-- Entry hazards on your side of the field (Stealth Rock, Spikes, Toxic
-  Spikes, Sticky Web) count against you, scaled down as you run out of
+- Hazards on your side of the field, scaled down as you run out of
   Pokemon to switch in.
-- Status conditions on living team members count against you, weighted by
-  severity and by the victim: a burn weighs by how physical the Pokemon's
-  attacking stats lean, paralysis by its base Speed, while Toxic, sleep,
-  freeze, and poison use flat weights (Toxic and freeze worst).
-- Stat boosts on your active Pokemon count for you — setup is pressure.
-- Screens and Tailwind count for you while they last.
-- Each fainted Pokemon costs a little extra beyond its lost HP, because it
-  also costs you options.
-- Item loss: a Pokemon that has eaten its berry, popped its Air Balloon,
-  or had its item knocked off fights a little weaker from then on.
-- The active matchup: how hard each active Pokemon can hit the other,
-  based on its revealed attacking types (plus assumed STAB and Tera type)
-  against the opponent's typing.
-- A speed edge, inferred from observed move order rather than base stats:
-  when both actives use same-priority moves in a turn, the first mover is
-  faster, period - that observation bakes in EVs, natures, and Choice
-  Scarf, none of which a replay reveals directly. Until a pairing has
-  been observed, the speed component stays at zero. Trick Room flips it.
-- Weather, terrain, and Trick Room, credited to the side that set them
-  for as long as they last (players set these up because they benefit
-  from them, so setter-benefit is the reliable reading).
+- Status on living team members. Burn scales with how physical the
+  victim's attack stats lean, paralysis with its base Speed. Toxic,
+  sleep, freeze and poison are flat.
+- Stat boosts on the active Pokemon.
+- Screens and Tailwind.
+- Weather, terrain and Trick Room, credited to whoever set them.
+- Item loss. A Pokemon that ate its berry or got knocked off fights a
+  little weaker from then on.
+- A small extra penalty per fainted Pokemon.
+- The active matchup: best type effectiveness of each active's revealed
+  attack types (plus assumed STAB and Tera) against the other's typing.
+- A speed edge, but only once move order has shown who is actually
+  faster. That observation bakes in EVs and Choice Scarf, which the log
+  never reveals. Trick Room flips it.
 
-Weights live in `PSMomentum.WEIGHTS` at the top of `src/parser.js` if you
-want to tune them. Hovering the chart shows which factors are driving the
-score on any given turn.
+Weights live in `PSMomentum.WEIGHTS` at the top of `src/parser.js`.
+Hover the chart to see which factors drive any given turn.
 
-## How it works
+## Luck
 
-Replay pages embed the full battle log in the HTML (a
-`script.battle-log-data` tag), and every replay also serves its raw log at
-`<replay-url>.log`. The content script grabs that log, parses the Showdown
-protocol (`|move|`, `|-damage|`, `|faint|`, ...), and renders the panel.
-Nothing leaves the browser and no permissions are needed beyond running on
-replay.pokemonshowdown.com.
+Every chance event the log can prove goes in a ledger: crits, natural
+misses, full paralysis, flinches, sleep and freeze turns, confusion
+self-hits, and secondary procs of all kinds (Scald burns, Shadow Ball
+drops, Hurricane confusion). Each break is weighted by how unlikely it
+was times how much it actually swung the game. Guaranteed effects like
+Nuzzle's paralysis weigh zero.
+
+Accuracy cuts both ways: every landed hit of an inaccurate move earns
+its user a small credit, every miss credits the defender, so playing
+exactly to the odds nets out to zero. Hitting 10/10 Hydro Pumps does
+not. Moves blocked by Protect never rolled accuracy and don't count.
+
+Damage rolls are the one kind of luck a replay can't expose, since
+exact stats are hidden.
+
+## The panel
+
+- Momentum chart with faint markers, hover tooltips, and a cursor that
+  tracks the replay's current turn.
+- A "Now playing" card: the current turn's net swing, each action's
+  point value, and which factors moved.
+- Verdict, turning points, and a key-moment timeline.
+- Head-to-head stats drawn as share bars.
+- The luck ledger, biggest breaks first.
+- Per-Pokemon damage dealt/taken and KOs for both teams.
+
+## Layout
 
 ```
 src/
   data/
-    typechart.js  type effectiveness chart (hand-written)
-    dex.js        species types/Speed + move types (generated, ~90 KB)
-  parser.js    battle log -> per-turn momentum snapshots + events
-  analysis.js  snapshots -> turning points, lead changes, control %
-  chart.js     canvas line chart with hover tooltips
-  content.js   page integration: finds the log, builds the panel
-  panel.css    panel styling
+    typechart.js  type chart (hand-written)
+    dex.js        species + move data (generated)
+  parser.js    log -> momentum snapshots, stats, events
+  analysis.js  snapshots -> turning points, luck weighting, control %
+  chart.js     canvas chart
+  content.js   page integration
+  panel.css
 test/
-  run.js       parser smoke test for Node (no browser needed)
+  run.js       parse one log: node test/run.js battle.log [--breakdown]
+  batch.js     crash-hunt recent replays: node test/batch.js [formats]
 tools/
-  build-dex.js regenerates src/data/dex.js from Showdown's public JSON
+  build-dex.js regenerate src/data/dex.js from Showdown's data
 ```
 
-When a new generation (or new species) comes out, refresh the bundled data
-with `node tools/build-dex.js`.
+Get any replay's raw log by appending `.log` to its URL.
 
-## Testing the parser without a browser
+## Roadmap
 
-```
-curl -o battle.log https://replay.pokemonshowdown.com/gen9ou-2629425144.log
-node test/run.js battle.log
-```
-
-Prints the parsed players, momentum points, faints, stats, and insights so
-you can iterate on the parser or momentum formula quickly.
-
-## What the panel shows
-
-- The momentum chart, with faint markers and hover tooltips explaining each
-  turn (contributing factors plus notable events, each with the momentum
-  points it was worth).
-- A "Now playing" card that follows the replay as it plays (or as you
-  seek): the turn's net momentum change, each action's point swing, and
-  which factors moved. A gold cursor tracks the current turn on the chart.
-- A one-line verdict on how the game went.
-- Turning points: the biggest momentum swings and what caused them.
-- Key moments: every KO, Terastallization, and hazard set, in order.
-- Head-to-head stats: KOs, direct and indirect damage, crits, status,
-  hazard layers, switches, turns in control, biggest single hit, and how
-  volatile the game was.
-- A luck ledger: every chance event the log can prove - crits, natural
-  misses (the move's real accuracy is checked, so a miss against a Fly
-  turn doesn't count), full paralysis, flinches, extra sleep/freeze
-  turns, confusion self-hits, and secondary-effect procs of every kind:
-  status (Scald burns, Body Slam paralysis), stat changes (Shadow Ball
-  drops, Meteor Mash boosts), and inflicted confusion (Hurricane) - each
-  weighted by the move's listed proc chance, while deliberate effects
-  (Confuse Ray, Swords Dance, Nuzzle's guaranteed paralysis) weigh
-  nothing. Breaks are not all equal: each one is weighted by its
-  improbability (a 1-in-24 crit outweighs a 30% burn, and a guaranteed
-  effect like Nuzzle's paralysis weighs zero) times its impact (how much
-  that turn actually swung momentum toward the beneficiary). The panel
-  shows each player's luck-point total and the biggest breaks first.
-  Accuracy works in both directions: every landed hit of an imperfect
-  move earns its user a small credit (hitting 10/10 Hydro Pumps is ~11%
-  odds and scores accordingly, aggregated into one "Hit 10/10" entry),
-  every miss credits the defender, and playing exactly to the odds nets
-  to zero. Moves blocked by Protect or that failed never rolled
-  accuracy and are excluded. Damage rolls (85-100%) are the one kind of
-  luck a replay cannot expose, since exact stats are hidden.
-- Per-Pokemon breakdowns for both teams: damage dealt, damage taken, KOs,
-  and when each one went down.
-
-## Ideas / roadmap
-
-- Win-condition awareness: weigh how well the Pokemon still in the back
-  match up against the opponent's remaining team, not just the actives.
-- Support for live battles on play.pokemonshowdown.com.
-- Doubles support (the parser currently assumes singles for some stats).
+- Win-condition awareness: score the Pokemon in the back against the
+  opponent's remaining team, not just the actives.
+- Live battles on play.pokemonshowdown.com.
+- Better doubles support.

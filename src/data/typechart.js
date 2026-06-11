@@ -1,5 +1,5 @@
-// Type effectiveness chart (gen 6+). CHART[attacking][defending] gives the
-// multiplier; anything not listed is neutral (1x).
+// Type chart, gen 6+. CHART[attacking][defending] = multiplier;
+// anything not listed is neutral.
 window.PSMomentum = window.PSMomentum || {};
 
 PSMomentum.TYPECHART = {

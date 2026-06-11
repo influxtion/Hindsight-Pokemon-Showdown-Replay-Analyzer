@@ -3,8 +3,7 @@ window.PSMomentum = window.PSMomentum || {};
 
 PSMomentum.analyze = function (parsed) {
   const pts = parsed.points;
-  // Momentum within this band counts as "even" so tiny chip damage
-  // doesn't register as a lead change.
+  // within this band counts as even, so chip damage isn't a "lead change"
   const EVEN_BAND = 3;
 
   let p1Ahead = 0;
@@ -23,8 +22,8 @@ PSMomentum.analyze = function (parsed) {
     }
   }
 
-  // Per-turn swings. Each point carries the events of its own turn, so the
-  // swing into pts[i] was caused by pts[i]'s events.
+  // each point carries its own turn's events, so the swing into pts[i]
+  // was caused by pts[i]'s events
   const swings = [];
   let deltaSum = 0;
   for (let i = 1; i < pts.length; i++) {
@@ -47,17 +46,15 @@ PSMomentum.analyze = function (parsed) {
     ? swings.reduce((a, b) => (Math.abs(b.delta) > Math.abs(a.delta) ? b : a))
     : null;
 
-  // Weighted luck: each break counts for its improbability (a crit is
-  // rarer than a Scald burn) times its impact (how much that turn actually
-  // swung toward the beneficiary - a crit into a KO matters, a crit on a
-  // wall that shrugged it off does not).
+  // luck = improbability x impact: a crit into a KO matters, a crit on a
+  // wall that shrugged it off doesn't
   const swingByTurn = {};
   for (const s of swings) swingByTurn[s.turn] = s.delta;
   const luck = {};
   for (const side of ["p1", "p2"]) {
     const sign = side === "p1" ? 1 : -1;
     const events = parsed.stats[side].luckEvents.map((ev) => {
-      // Game-long aggregates (accuracy streaks) carry their own weight.
+      // accuracy-streak aggregates carry their own weight
       if (ev.flat) return { turn: null, text: ev.text, weight: ev.p };
       const toward = (swingByTurn[ev.turn] || 0) * sign;
       const impact = Math.max(0.25, Math.min(2, toward / 10));
@@ -70,7 +67,7 @@ PSMomentum.analyze = function (parsed) {
     };
   }
 
-  // A comeback: the winner was behind by 20+ momentum at some point.
+  // winner was down 20+ momentum at some point
   let comeback = false;
   if (parsed.winner === "p1" || parsed.winner === "p2") {
     const sign = parsed.winner === "p1" ? 1 : -1;
@@ -88,8 +85,7 @@ PSMomentum.analyze = function (parsed) {
       p1: Math.round((100 * p1Ahead) / total),
       p2: Math.round((100 * p2Ahead) / total),
     },
-    // Average size of a turn-to-turn momentum change: how chaotic the
-    // game was.
+    // average turn-to-turn change: how chaotic the game was
     volatility: swings.length ? Math.round((10 * deltaSum) / swings.length) / 10 : 0,
     avgMomentum: Math.round(momentumSum / total),
     finalMargin: pts.length ? Math.round(pts[pts.length - 1].m) : 0,

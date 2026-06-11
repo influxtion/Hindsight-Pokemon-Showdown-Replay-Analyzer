@@ -1,5 +1,5 @@
-// Canvas line chart of the momentum score per turn. Blue area = player 1
-// ahead, red area = player 2 ahead. Hover shows the turn's events.
+// Momentum line chart. Blue area = p1 ahead, red = p2.
+// Hover shows the turn's factors and events.
 window.PSMomentum = window.PSMomentum || {};
 
 PSMomentum.renderChart = function (canvas, parsed) {
@@ -61,7 +61,6 @@ PSMomentum.renderChart = function (canvas, parsed) {
       ctx.fillText(String(t), x(t), PAD.top + plotH + 6);
     }
 
-    // Build the momentum line path once, reuse for both clipped fills.
     const linePath = () => {
       ctx.beginPath();
       points.forEach((p, i) =>
@@ -75,7 +74,7 @@ PSMomentum.renderChart = function (canvas, parsed) {
       ctx.closePath();
     };
 
-    // Fill above zero in P1's color, below in P2's.
+    // fill above zero in p1's color, below in p2's
     ctx.save();
     ctx.beginPath();
     ctx.rect(PAD.left, PAD.top, plotW, y(0) - PAD.top);
@@ -114,7 +113,7 @@ PSMomentum.renderChart = function (canvas, parsed) {
       }
     }
 
-    // Playback cursor: where the replay currently is.
+    // playback cursor
     if (cursorTurn !== null && cursorTurn >= minTurn && cursorTurn <= maxTurn) {
       ctx.strokeStyle = "#c9b687";
       ctx.lineWidth = 2;
@@ -139,7 +138,7 @@ PSMomentum.renderChart = function (canvas, parsed) {
       const lines = [
         p.label + "  (momentum " + (p.m > 0 ? "+" : "") + Math.round(p.m) + ")",
       ];
-      // What is driving the score right now, biggest factors first.
+      // biggest factors first
       if (p.breakdown) {
         const factors = Object.entries(p.breakdown)
           .filter(([, v]) => Math.abs(v) >= 1.5)
