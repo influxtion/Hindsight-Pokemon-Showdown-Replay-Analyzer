@@ -231,10 +231,10 @@ PSMomentum.parseReplay = function (logText) {
   function statusWeight(mon) {
     const entry = dexEntry(mon);
     if (entry) {
-      if (mon.status === "brn") {
+      if (mon.status === "brn" && typeof entry.at === "number" && typeof entry.sa === "number") {
         return 2 + 4 * (entry.at / Math.max(1, entry.at + entry.sa));
       }
-      if (mon.status === "par") {
+      if (mon.status === "par" && typeof entry.s === "number") {
         return 2 + 3 * Math.max(0, Math.min(1, (entry.s - 50) / 60));
       }
     }

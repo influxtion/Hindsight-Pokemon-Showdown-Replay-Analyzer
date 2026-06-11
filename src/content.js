@@ -444,6 +444,7 @@
   async function init() {
     try {
       console.log("[Hindsight] init, path =", location.pathname);
+      playbackObserver?.disconnect();
       document.getElementById(PANEL_ID)?.remove();
       if (!isReplayPath(location.pathname)) {
         console.log("[Hindsight] not a replay path, skipping");
@@ -459,7 +460,6 @@
       if (parsed.points.length < 2) return;
       const insights = NS.analyze(parsed);
 
-      playbackObserver?.disconnect();
       const { panel, canvas, updateNow } = buildPanel(parsed, insights);
       document.body.appendChild(panel);
       const chart = NS.renderChart(canvas, parsed);
