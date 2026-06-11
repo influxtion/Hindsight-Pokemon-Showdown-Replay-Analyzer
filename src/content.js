@@ -441,7 +441,11 @@
     scan();
   }
 
+  let initGen = 0;
   async function init() {
+    // If the URL changes while we are fetching, a newer init supersedes
+    // this one; bail instead of rendering a panel for the wrong replay.
+    const gen = ++initGen;
     try {
       console.log("[Hindsight] init, path =", location.pathname);
       playbackObserver?.disconnect();
@@ -452,6 +456,7 @@
       }
 
       const log = await getLog();
+      if (gen !== initGen) return;
       console.log("[Hindsight] log:", log ? log.length + " chars" : "NOT FOUND");
       if (!log) return;
 
