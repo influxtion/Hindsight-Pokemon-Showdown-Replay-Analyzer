@@ -8,6 +8,7 @@ PSMomentum.renderChart = function (canvas, parsed) {
   const PAD = { left: 34, right: 12, top: 12, bottom: 24 };
   const points = parsed.points;
   let hoverIndex = -1;
+  let cursorTurn = null; // the turn the replay is currently showing
 
   function draw() {
     const dpr = window.devicePixelRatio || 1;
@@ -113,6 +114,17 @@ PSMomentum.renderChart = function (canvas, parsed) {
       }
     }
 
+    // Playback cursor: where the replay currently is.
+    if (cursorTurn !== null && cursorTurn >= minTurn && cursorTurn <= maxTurn) {
+      ctx.strokeStyle = "#c9b687";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x(cursorTurn), PAD.top);
+      ctx.lineTo(x(cursorTurn), PAD.top + plotH);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+
     // Hover guide + tooltip
     if (hoverIndex >= 0 && hoverIndex < points.length) {
       const p = points[hoverIndex];
@@ -136,7 +148,13 @@ PSMomentum.renderChart = function (canvas, parsed) {
           .map(([k, v]) => k + " " + (v > 0 ? "+" : "") + Math.round(v));
         if (factors.length) lines.push(factors.join(", "));
       }
-      for (const ev of p.events) lines.push("- " + ev.text);
+      for (const ev of p.events) {
+        let suffix = "";
+        if (ev.delta && Math.abs(ev.delta) >= 0.5) {
+          suffix = " (" + (ev.delta > 0 ? "+" : "") + Math.round(ev.delta) + ")";
+        }
+        lines.push("- " + ev.text + suffix);
+      }
       ctx.font = "11px sans-serif";
       let boxW = 0;
       for (const l of lines) boxW = Math.max(boxW, ctx.measureText(l).width);
@@ -185,4 +203,13 @@ PSMomentum.renderChart = function (canvas, parsed) {
   new ResizeObserver(draw).observe(canvas);
 
   draw();
+
+  return {
+    setCursor(turn) {
+      if (turn !== cursorTurn) {
+        cursorTurn = turn;
+        draw();
+      }
+    },
+  };
 };

@@ -91,7 +91,11 @@ you can iterate on the parser or momentum formula quickly.
 ## What the panel shows
 
 - The momentum chart, with faint markers and hover tooltips explaining each
-  turn (contributing factors plus notable events).
+  turn (contributing factors plus notable events, each with the momentum
+  points it was worth).
+- A "Now playing" card that follows the replay as it plays (or as you
+  seek): the turn's net momentum change, each action's point swing, and
+  which factors moved. A gold cursor tracks the current turn on the chart.
 - A one-line verdict on how the game went.
 - Turning points: the biggest momentum swings and what caused them.
 - Key moments: every KO, Terastallization, and hazard set, in order.
@@ -119,7 +123,6 @@ you can iterate on the parser or momentum formula quickly.
 
 ## Ideas / roadmap
 
-- Sync the chart cursor with the replay's current turn as it plays.
 - Win-condition awareness: weigh how well the Pokemon still in the back
   match up against the opponent's remaining team, not just the actives.
 - Support for live battles on play.pokemonshowdown.com.

@@ -133,6 +133,79 @@
       el("div", "psm-hint", "Hover the chart to see what drove each turn.")
     );
 
+    // Live card that follows the replay as it plays.
+    const nowCard = el("div", "psm-now");
+    const nowHead = el("div", "psm-now-head");
+    nowHead.appendChild(el("span", "psm-section-title", "Now playing"));
+    const nowChip = el("span", "psm-chip", "");
+    nowHead.appendChild(nowChip);
+    nowCard.appendChild(nowHead);
+    const nowContent = el("div", "psm-now-content");
+    nowCard.appendChild(nowContent);
+    body.appendChild(nowCard);
+
+    function updateNow(turn) {
+      nowContent.textContent = "";
+      if (turn === null) {
+        nowChip.textContent = "waiting";
+        nowContent.appendChild(
+          el("div", "psm-hint", "Press play - this card follows the replay turn by turn.")
+        );
+        return;
+      }
+      const idx = parsed.points.findIndex((p) => p.turn === turn);
+      if (idx < 0) {
+        nowChip.textContent = "Turn " + turn;
+        return;
+      }
+      const point = parsed.points[idx];
+      const prev = idx > 0 ? parsed.points[idx - 1] : null;
+      nowChip.textContent = point.label;
+
+      const net = prev ? point.m - prev.m : point.m;
+      const summary = el("div", "psm-now-summary");
+      const netSpan = el(
+        "span",
+        "psm-now-net " + (net > 1 ? "psm-p1" : net < -1 ? "psm-p2" : ""),
+        (net > 0 ? "+" : "") + Math.round(net)
+      );
+      summary.appendChild(netSpan);
+      summary.appendChild(
+        el("span", "psm-now-total", " this turn, momentum now " + Math.round(point.m))
+      );
+      nowContent.appendChild(summary);
+
+      for (const ev of point.events) {
+        const row = el("div", "psm-action");
+        row.appendChild(el("span", "", ev.text));
+        if (ev.delta && Math.abs(ev.delta) >= 0.5) {
+          row.appendChild(
+            el(
+              "span",
+              "psm-action-delta " + (ev.delta > 0 ? "psm-p1" : "psm-p2"),
+              (ev.delta > 0 ? "+" : "") + Math.round(ev.delta)
+            )
+          );
+        }
+        nowContent.appendChild(row);
+      }
+
+      // Which factors moved this turn (covers chip damage, healing, and
+      // anything else that happened without a headline event).
+      if (prev) {
+        const moved = Object.keys(point.breakdown)
+          .map((k) => ({ k, d: point.breakdown[k] - prev.breakdown[k] }))
+          .filter((f) => Math.abs(f.d) >= 1)
+          .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))
+          .slice(0, 3)
+          .map((f) => f.k + " " + (f.d > 0 ? "+" : "") + Math.round(f.d));
+        if (moved.length) {
+          nowContent.appendChild(el("div", "psm-now-factors", moved.join("  ·  ")));
+        }
+      }
+    }
+    updateNow(null);
+
     let verdictClass = "psm-verdict";
     if (parsed.winner === "p1" || parsed.winner === "p2") {
       verdictClass += " psm-verdict-" + parsed.winner;
@@ -340,7 +413,32 @@
       )
     );
 
-    return { panel, canvas };
+    return { panel, canvas, updateNow };
+  }
+
+  // Watch the replay player's battle log for new turn headers so the panel
+  // can follow playback (including seeking backwards).
+  let playbackObserver = null;
+  function watchPlayback(onTurn) {
+    let lastTurn = null;
+    let debounce = null;
+    const scan = () => {
+      let turn = null;
+      for (const h of document.querySelectorAll(".battle-log h2")) {
+        const m = /^Turn (\d+)/.exec(h.textContent.trim());
+        if (m) turn = parseInt(m[1], 10);
+      }
+      if (turn !== lastTurn) {
+        lastTurn = turn;
+        onTurn(turn);
+      }
+    };
+    playbackObserver = new MutationObserver(() => {
+      clearTimeout(debounce);
+      debounce = setTimeout(scan, 150);
+    });
+    playbackObserver.observe(document.body, { childList: true, subtree: true });
+    scan();
   }
 
   async function init() {
@@ -361,9 +459,14 @@
       if (parsed.points.length < 2) return;
       const insights = NS.analyze(parsed);
 
-      const { panel, canvas } = buildPanel(parsed, insights);
+      playbackObserver?.disconnect();
+      const { panel, canvas, updateNow } = buildPanel(parsed, insights);
       document.body.appendChild(panel);
-      NS.renderChart(canvas, parsed);
+      const chart = NS.renderChart(canvas, parsed);
+      watchPlayback((turn) => {
+        updateNow(turn);
+        chart.setCursor(turn);
+      });
       console.log("[Hindsight] panel rendered");
     } catch (err) {
       console.error("[Hindsight] failed:", err);

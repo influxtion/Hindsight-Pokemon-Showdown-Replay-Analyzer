@@ -264,7 +264,7 @@ PSMomentum.parseReplay = function (logText) {
     return null;
   }
 
-  function snapshot(turn, label) {
+  function computeMomentum() {
     const s1 = sideScore("p1");
     const s2 = sideScore("p2");
 
@@ -284,17 +284,10 @@ PSMomentum.parseReplay = function (logText) {
       if (fieldEffects.trickroom) speedDiff = -speedDiff;
     }
 
-    const m = Math.max(
-      -100,
-      Math.min(100, s1.total - s2.total + threatDiff + speedDiff)
-    );
-    points.push({
-      turn,
-      label,
-      m,
+    return {
+      m: Math.max(-100, Math.min(100, s1.total - s2.total + threatDiff + speedDiff)),
       p1Pct: s1.hp,
       p2Pct: s2.hp,
-      events: turnEvents,
       // Positive components favor p1, negative favor p2.
       breakdown: {
         HP: s1.hp - s2.hp,
@@ -307,6 +300,19 @@ PSMomentum.parseReplay = function (logText) {
         Matchup: threatDiff,
         Speed: speedDiff,
       },
+    };
+  }
+
+  function snapshot(turn, label) {
+    const state = computeMomentum();
+    points.push({
+      turn,
+      label,
+      m: state.m,
+      p1Pct: state.p1Pct,
+      p2Pct: state.p2Pct,
+      events: turnEvents,
+      breakdown: state.breakdown,
     });
     turnEvents = [];
   }
@@ -369,10 +375,12 @@ PSMomentum.parseReplay = function (logText) {
     }
   }
 
+  let lineM = 0; // momentum before the current line, for per-action deltas
   for (const line of logText.split("\n")) {
     if (!line.startsWith("|")) continue;
     const parts = line.split("|"); // parts[0] is "" before the leading |
     const cmd = parts[1];
+    const eventsBefore = turnEvents.length;
 
     switch (cmd) {
       case "player":
@@ -757,6 +765,20 @@ PSMomentum.parseReplay = function (logText) {
           pendingAcc = null;
         }
         break;
+    }
+
+    // Attribute this line's momentum change to any events it produced, so
+    // each action carries its own point swing. (snapshot() resets the
+    // event list, so skip the bookkeeping on turn boundaries.)
+    if (cmd !== "turn" && turnEvents.length > eventsBefore) {
+      const mNow = computeMomentum().m;
+      const added = turnEvents.length - eventsBefore;
+      for (let i = eventsBefore; i < turnEvents.length; i++) {
+        turnEvents[i].delta = (mNow - lineM) / added;
+      }
+      lineM = mNow;
+    } else if (cmd !== "turn") {
+      lineM = computeMomentum().m;
     }
   }
   resolvePendingAcc(true);

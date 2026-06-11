@@ -107,6 +107,58 @@
   margin: 2px 0 10px;
 }
 
+#psm-panel .psm-now {
+  background: #fdf9f0;
+  border: 1px solid #e2d5b8;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+#psm-panel .psm-now-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+#psm-panel .psm-now-head .psm-section-title {
+  margin-bottom: 0;
+}
+
+#psm-panel .psm-now-summary {
+  margin: 4px 0;
+}
+
+#psm-panel .psm-now-net {
+  font-size: 15px;
+  font-weight: bold;
+}
+
+#psm-panel .psm-now-total {
+  font-size: 11px;
+  color: #6e675f;
+}
+
+#psm-panel .psm-action {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  border-top: 1px solid #f0e8d8;
+  font-size: 11px;
+}
+
+#psm-panel .psm-action-delta {
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+#psm-panel .psm-now-factors {
+  margin-top: 5px;
+  font-size: 10px;
+  color: #8a8378;
+}
+
 #psm-panel .psm-verdict {
   background: #f3eee4;
   border-left: 3px solid #c9b687;
