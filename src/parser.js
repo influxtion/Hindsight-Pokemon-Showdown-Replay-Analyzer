@@ -174,7 +174,7 @@ PSMomentum.parseReplay = function (logText) {
       hpSum += mon.hp;
       if (mon.fainted) faintedCount++;
       else {
-        if (mon.status) statusPen += W.status[mon.status] || 3;
+        if (mon.status) statusPen += statusWeight(mon);
         if (mon.itemless) itemPen += W.itemLost;
       }
     }
@@ -223,6 +223,23 @@ PSMomentum.parseReplay = function (logText) {
 
   function dexEntry(mon) {
     return (PSMomentum.DEX && PSMomentum.DEX[normId(mon.species)]) || null;
+  }
+
+  // Status severity depends on the victim, not just the status: a burn
+  // cripples a physical attacker (2..6 by attack lean), paralysis cripples
+  // a fast Pokemon (2..5 by base Speed). Others use flat weights.
+  function statusWeight(mon) {
+    const entry = dexEntry(mon);
+    if (entry) {
+      if (mon.status === "brn") {
+        return 2 + 4 * (entry.at / Math.max(1, entry.at + entry.sa));
+      }
+      if (mon.status === "par") {
+        return 2 + 3 * Math.max(0, Math.min(1, (entry.s - 50) / 60));
+      }
+    }
+    const base = W.status[mon.status];
+    return base !== undefined ? base : 3;
   }
 
   // A Pokemon's current defensive typing (Tera overrides, except Stellar).
@@ -576,6 +593,54 @@ PSMomentum.parseReplay = function (logText) {
         const stat = parts[3];
         const amt = (parseInt(parts[4], 10) || 0) * (cmd === "-boost" ? 1 : -1);
         mon.boosts[stat] = Math.max(-6, Math.min(6, (mon.boosts[stat] || 0) + amt));
+        // Stat changes from a move's secondary effect are luck: Shadow
+        // Ball's 20% Sp. Def drop, Meteor Mash's 20% Attack boost.
+        // Deliberate stat moves (Swords Dance: a status move) and
+        // guaranteed riders (Acid Spray: 100%) weigh nothing.
+        if (!line.includes("[from]") && lastMove) {
+          const md = PSMomentum.MOVES && PSMomentum.MOVES[normId(lastMove.move)];
+          if (md && md.c && typeof md.sc === "number") {
+            const statNames = { atk: "Attack", def: "Defense", spa: "Sp. Atk", spd: "Sp. Def", spe: "Speed" };
+            const pretty = statNames[stat] || stat;
+            if (cmd === "-unboost" && lastMove.side !== ident.side) {
+              addLuck(
+                lastMove.side,
+                mon.name + "'s " + pretty + " dropped by " + lastMove.move,
+                1 - md.sc / 100
+              );
+            } else if (cmd === "-boost" && lastMove.key === ident.key) {
+              addLuck(
+                ident.side,
+                mon.name + "'s " + pretty + " rose from " + lastMove.move,
+                1 - md.sc / 100
+              );
+            }
+          }
+        }
+        break;
+      }
+
+      case "-start": {
+        // Confusion is a volatile, not a status line. From a damaging move
+        // (Hurricane 30%) it is a luck proc; from Confuse Ray it is intent,
+        // and Outrage fatigue ([fatigue]) is self-inflicted.
+        const ident = parseIdent(parts[2]);
+        if (!ident) break;
+        if (
+          normId(parts[3]) === "confusion" &&
+          !line.includes("[fatigue]") &&
+          lastMove &&
+          lastMove.side !== ident.side
+        ) {
+          const md = PSMomentum.MOVES && PSMomentum.MOVES[normId(lastMove.move)];
+          if (md && md.c) {
+            addLuck(
+              lastMove.side,
+              getMon(ident).name + " was confused by " + lastMove.move,
+              procImprobability(lastMove.move)
+            );
+          }
+        }
         break;
       }
 

@@ -19,7 +19,9 @@ async function main() {
   const dex = {};
   for (const [id, p] of Object.entries(pokedex)) {
     if (!p.types || !p.baseStats) continue;
-    dex[id] = { t: p.types, s: p.baseStats.spe };
+    // Attack/Sp.Atk are kept so status severity can consider the victim:
+    // a burn hurts a physical attacker far more than a special one.
+    dex[id] = { t: p.types, s: p.baseStats.spe, at: p.baseStats.atk, sa: p.baseStats.spa };
   }
   const moves = {};
   for (const [id, m] of Object.entries(movedex)) {

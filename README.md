@@ -27,7 +27,9 @@ for the things players actually weigh:
   Spikes, Sticky Web) count against you, scaled down as you run out of
   Pokemon to switch in.
 - Status conditions on living team members count against you, weighted by
-  severity (Toxic and freeze worst, regular poison least).
+  severity and by the victim: a burn weighs by how physical the Pokemon's
+  attacking stats lean, paralysis by its base Speed, while Toxic, sleep,
+  freeze, and poison use flat weights (Toxic and freeze worst).
 - Stat boosts on your active Pokemon count for you — setup is pressure.
 - Screens and Tailwind count for you while they last.
 - Each fainted Pokemon costs a little extra beyond its lost HP, because it
@@ -105,8 +107,12 @@ you can iterate on the parser or momentum formula quickly.
 - A luck ledger: every chance event the log can prove - crits, natural
   misses (the move's real accuracy is checked, so a miss against a Fly
   turn doesn't count), full paralysis, flinches, extra sleep/freeze
-  turns, confusion self-hits, and secondary-effect procs like Scald
-  burns. Breaks are not all equal: each one is weighted by its
+  turns, confusion self-hits, and secondary-effect procs of every kind:
+  status (Scald burns, Body Slam paralysis), stat changes (Shadow Ball
+  drops, Meteor Mash boosts), and inflicted confusion (Hurricane) - each
+  weighted by the move's listed proc chance, while deliberate effects
+  (Confuse Ray, Swords Dance, Nuzzle's guaranteed paralysis) weigh
+  nothing. Breaks are not all equal: each one is weighted by its
   improbability (a 1-in-24 crit outweighs a 30% burn, and a guaranteed
   effect like Nuzzle's paralysis weighs zero) times its impact (how much
   that turn actually swung momentum toward the beneficiary). The panel
